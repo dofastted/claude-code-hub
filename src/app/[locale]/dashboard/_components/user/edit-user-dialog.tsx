@@ -12,6 +12,7 @@ import {
   removeUser,
   resetUserAllStatistics,
   resetUserLimitsOnly,
+  syncUserConfigToKeys,
   toggleUserEnabled,
 } from "@/actions/users";
 import {
@@ -96,6 +97,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
   const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
+  const [isSyncingKeys, setIsSyncingKeys] = useState(false);
 
   // Always show providerGroup field in edit mode
   const userEditTranslations = useUserTranslations({ showProviderGroup: true });
@@ -268,6 +270,49 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
       toast.error(t("editDialog.resetLimits.error"));
     } finally {
       setIsResettingLimits(false);
+    }
+  };
+
+  const handleSyncKeys = async () => {
+    setIsSyncingKeys(true);
+    try {
+      const data = form.values || defaultValues;
+      const res = await syncUserConfigToKeys(user.id, {
+        name: data.name,
+        note: data.note,
+        tags: data.tags,
+        expiresAt: data.expiresAt ?? null,
+        providerGroup: normalizeProviderGroup(data.providerGroup),
+        rpm: data.rpm,
+        limit5hUsd: data.limit5hUsd,
+        dailyQuota: data.dailyQuota,
+        limitWeeklyUsd: data.limitWeeklyUsd,
+        limitMonthlyUsd: data.limitMonthlyUsd,
+        limitTotalUsd: data.limitTotalUsd,
+        limitConcurrentSessions: data.limitConcurrentSessions,
+        dailyResetMode: data.dailyResetMode,
+        dailyResetTime: data.dailyResetTime,
+        allowedClients: data.allowedClients,
+        blockedClients: data.blockedClients,
+        allowedModels: data.allowedModels,
+      });
+
+      if (!res.ok) {
+        toast.error(res.error || t("editDialog.syncKeys.error"));
+        return;
+      }
+
+      toast.success(t("editDialog.syncKeys.success", { count: res.data.keyCount }));
+      onSuccess?.();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["userTags"] });
+      router.refresh();
+    } catch (error) {
+      console.error("[EditUserDialog] sync keys failed", error);
+      toast.error(t("editDialog.syncKeys.error"));
+    } finally {
+      setIsSyncingKeys(false);
     }
   };
 
@@ -458,13 +503,22 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
         <DialogFooter className="px-6 pb-6 flex-shrink-0">
           <Button
             type="button"
+            variant="secondary"
+            onClick={handleSyncKeys}
+            disabled={isPending || isSyncingKeys}
+          >
+            {isSyncingKeys && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSyncingKeys ? t("editDialog.syncKeys.loading") : t("editDialog.syncKeys.button")}
+          </Button>
+          <Button
+            type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={isPending}
+            disabled={isPending || isSyncingKeys}
           >
             {tCommon("cancel")}
           </Button>
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || isSyncingKeys}>
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isPending ? t("editDialog.saving") : tCommon("save")}
           </Button>

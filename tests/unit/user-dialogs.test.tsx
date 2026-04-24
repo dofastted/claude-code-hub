@@ -45,12 +45,14 @@ const mockToggleUserEnabled = vi.fn().mockResolvedValue({ ok: true });
 const mockAddKey = vi.fn().mockResolvedValue({ ok: true, data: { key: "sk-test-key" } });
 const mockEditKey = vi.fn().mockResolvedValue({ ok: true });
 const mockCreateUserOnly = vi.fn().mockResolvedValue({ ok: true, data: { user: { id: 1 } } });
+const mockSyncUserConfigToKeys = vi.fn().mockResolvedValue({ ok: true, data: { keyCount: 2 } });
 
 vi.mock("@/actions/users", () => ({
   editUser: (...args: unknown[]) => mockEditUser(...args),
   removeUser: (...args: unknown[]) => mockRemoveUser(...args),
   toggleUserEnabled: (...args: unknown[]) => mockToggleUserEnabled(...args),
   createUserOnly: (...args: unknown[]) => mockCreateUserOnly(...args),
+  syncUserConfigToKeys: (...args: unknown[]) => mockSyncUserConfigToKeys(...args),
 }));
 
 vi.mock("@/actions/keys", () => ({
@@ -131,8 +133,21 @@ vi.mock("@/app/[locale]/dashboard/_components/user/forms/user-edit-section", () 
 }));
 
 vi.mock("@/app/[locale]/dashboard/_components/user/forms/key-edit-section", () => ({
-  KeyEditSection: ({ keyData, onChange, translations: _translations }: any) => (
-    <div data-testid="key-edit-section" data-key-id={keyData?.id}>
+  KeyEditSection: ({
+    keyData,
+    onChange,
+    translations: _translations,
+    showExpireTime,
+    showProviderGroup,
+    showEnableStatus,
+  }: any) => (
+    <div
+      data-testid="key-edit-section"
+      data-key-id={keyData?.id}
+      data-show-expire-time={String(showExpireTime)}
+      data-show-provider-group={String(showProviderGroup)}
+      data-show-enable-status={String(showEnableStatus)}
+    >
       <input
         data-testid="key-name-input"
         value={keyData?.name || ""}
@@ -209,6 +224,12 @@ const messages = {
         saving: "Saving...",
         saveSuccess: "User saved",
         saveFailed: "Save failed",
+        syncKeys: {
+          button: "Sync to Keys",
+          loading: "Syncing...",
+          success: "Synced to {count} keys",
+          error: "Failed to sync keys",
+        },
         operationFailed: "Operation failed",
         userDisabled: "User disabled",
         userEnabled: "User enabled",
@@ -492,6 +513,7 @@ describe("EditUserDialog", () => {
 
     expect(buttonTexts).toContain("Save");
     expect(buttonTexts).toContain("Cancel");
+    expect(buttonTexts).toContain("Sync to Keys");
 
     unmount();
   });
@@ -667,7 +689,11 @@ describe("CreateUserDialog", () => {
       "Create User"
     );
     expect(container.querySelector('[data-testid="user-edit-section"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="key-edit-section"]')).not.toBeNull();
+    const keyEditSection = container.querySelector('[data-testid="key-edit-section"]');
+    expect(keyEditSection).not.toBeNull();
+    expect(keyEditSection?.getAttribute("data-show-expire-time")).toBe("true");
+    expect(keyEditSection?.getAttribute("data-show-provider-group")).toBe("false");
+    expect(keyEditSection?.getAttribute("data-show-enable-status")).toBe("false");
 
     unmount();
   });
