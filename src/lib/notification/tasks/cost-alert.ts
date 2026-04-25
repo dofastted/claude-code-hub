@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, providers } from "@/drizzle/schema";
+import { keys, providers, users } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { getTimeRangeForPeriod } from "@/lib/rate-limit/time-utils";
 import type { CostAlertData } from "@/lib/webhook";
@@ -58,12 +58,12 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
   const alerts: CostAlertData[] = [];
 
   try {
-    // 查询有配额限制的密钥
+    // 查询有配额限制的密钥，通知展示用户基本信息里的名称，而不是 key 名称。
     const keysWithLimits = await db
       .select({
         id: keys.id,
         key: keys.key,
-        userName: keys.name,
+        userName: users.name,
 
         // 限额配置
         limit5h: keys.limit5hUsd,
@@ -71,6 +71,7 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         limitMonth: keys.limitMonthlyUsd,
       })
       .from(keys)
+      .innerJoin(users, eq(keys.userId, users.id))
       .where(
         sql`${keys.limit5hUsd} > 0 OR ${keys.limitWeeklyUsd} > 0 OR ${keys.limitMonthlyUsd} > 0`
       );

@@ -24,6 +24,7 @@ const mockSumKeyCostInTimeRange = vi.fn();
 const mockSumProviderCostInTimeRange = vi.fn();
 const mockDbSelect = vi.fn();
 const mockDbFrom = vi.fn();
+const mockDbInnerJoin = vi.fn();
 const mockDbWhere = vi.fn();
 
 // Mock dependencies before importing the module under test
@@ -35,6 +36,12 @@ vi.mock("@/drizzle/db", () => ({
         from: (...fromArgs: unknown[]) => {
           mockDbFrom(...fromArgs);
           return {
+            innerJoin: (...joinArgs: unknown[]) => {
+              mockDbInnerJoin(...joinArgs);
+              return {
+                where: (...whereArgs: unknown[]) => mockDbWhere(...whereArgs),
+              };
+            },
             where: (...whereArgs: unknown[]) => mockDbWhere(...whereArgs),
           };
         },
@@ -230,6 +237,32 @@ describe("Cost Alert Time Windows", () => {
         threshold: 0.8,
         period: "5小时",
       });
+    });
+
+    it("should use the user profile name instead of the key name for user alerts", async () => {
+      mockDbWhere.mockResolvedValue([
+        {
+          id: 1,
+          key: "test-key",
+          keyName: "default",
+          userName: "Alice Profile",
+          limit5h: "10.00",
+          limitWeek: null,
+          limitMonth: null,
+        },
+      ]);
+      mockSumKeyCostInTimeRange.mockResolvedValue(9);
+
+      const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
+      const alerts = await generateCostAlerts(0.8);
+
+      expect(mockDbInnerJoin).toHaveBeenCalled();
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({
+        targetType: "user",
+        targetName: "Alice Profile",
+      });
+      expect(alerts[0].targetName).not.toBe("default");
     });
 
     it("should NOT generate alert when cost is below threshold", async () => {
