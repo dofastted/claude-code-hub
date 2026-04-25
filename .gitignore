@@ -88,3 +88,5 @@ tmp/
 .sisyphus
 .ace-tool/
 .worktrees/
+# Local runtime artifacts
+.runtime/
