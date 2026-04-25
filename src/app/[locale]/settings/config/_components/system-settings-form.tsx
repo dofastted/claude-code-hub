@@ -55,6 +55,7 @@ interface SystemSettingsFormProps {
     | "currencyDisplay"
     | "billingModelSource"
     | "codexPriorityBillingSource"
+    | "costMultiplierCorrection"
     | "timezone"
     | "verboseProviderError"
     | "enableHttp2"
@@ -100,6 +101,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [codexPriorityBillingSource, setCodexPriorityBillingSource] =
     useState<CodexPriorityBillingSource>(initialSettings.codexPriorityBillingSource);
+  const [costMultiplierCorrection, setCostMultiplierCorrection] = useState<string>(
+    String(initialSettings.costMultiplierCorrection ?? 0)
+  );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -182,6 +186,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         billingModelSource,
         codexPriorityBillingSource,
+        costMultiplierCorrection: Number(costMultiplierCorrection || 0),
         timezone,
         verboseProviderError,
         enableHttp2,
@@ -214,6 +219,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
+        setCostMultiplierCorrection(String(result.data.costMultiplierCorrection ?? 0));
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
@@ -360,6 +366,28 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">{t("codexPriorityBillingSourceDesc")}</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label
+            htmlFor="cost-multiplier-correction"
+            className="text-sm font-medium text-foreground"
+          >
+            {t("costMultiplierCorrection")}
+          </Label>
+          <Input
+            id="cost-multiplier-correction"
+            type="number"
+            step="0.01"
+            min="-100"
+            max="100"
+            value={costMultiplierCorrection}
+            onChange={(event) => setCostMultiplierCorrection(event.target.value)}
+            placeholder="0"
+            disabled={isPending}
+            className={inputClassName}
+          />
+          <p className="text-xs text-muted-foreground">{t("costMultiplierCorrectionDesc")}</p>
         </div>
 
         <div className="flex items-center justify-between gap-4 rounded-lg border border-white/5 bg-background/30 p-3">

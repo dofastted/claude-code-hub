@@ -31,6 +31,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     currencyDisplay: "USD",
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
+    costMultiplierCorrection: 0,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -149,6 +150,7 @@ describe("SystemSettingsCache", () => {
         enableHighConcurrencyMode: false,
         interceptAnthropicWarmupRequests: false,
         codexPriorityBillingSource: "requested",
+        costMultiplierCorrection: 0,
       })
     );
     expect(loggerWarnMock).toHaveBeenCalledTimes(1);

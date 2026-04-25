@@ -44,6 +44,7 @@
       "requests": "請求數",
       "successRate": "成功率",
       "latency": "平均延遲",
+      "website": "官網",
       "lastRequestValue": "最近請求 {value}",
       "noRecentTraffic": "最近沒有流量"
     }

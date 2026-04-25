@@ -141,6 +141,7 @@ function createFallbackSettings(): SystemSettings {
     currencyDisplay: "USD",
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
+    costMultiplierCorrection: 0,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -248,6 +249,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     };
     const fullSelection = {
       ...selectionWithoutHighConcurrencyMode,
+      costMultiplierCorrection: systemSettings.costMultiplierCorrection,
       enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
     };
 
@@ -328,6 +330,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           currencyDisplay: "USD",
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
+          costMultiplierCorrection: "0",
           enableHighConcurrencyMode: false,
         })
         .onConflictDoNothing();
@@ -439,6 +442,7 @@ export async function updateSystemSettings(
   };
   const fullReturning = {
     ...returningWithoutHighConcurrencyMode,
+    costMultiplierCorrection: systemSettings.costMultiplierCorrection,
     enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
   };
 
@@ -469,6 +473,9 @@ export async function updateSystemSettings(
     }
     if (payload.codexPriorityBillingSource !== undefined) {
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
+    }
+    if (payload.costMultiplierCorrection !== undefined) {
+      updates.costMultiplierCorrection = String(payload.costMultiplierCorrection);
     }
 
     // 系统时区配置字段（如果提供）
@@ -596,6 +603,7 @@ export async function updateSystemSettings(
 
       const downgradedUpdates = { ...updates };
       delete downgradedUpdates.enableHighConcurrencyMode;
+      delete downgradedUpdates.costMultiplierCorrection;
 
       try {
         [updated] = await db

@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableHighConcurrencyMode"
   | "interceptAnthropicWarmupRequests"
   | "codexPriorityBillingSource"
+  | "costMultiplierCorrection"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
   | "enableBillingHeaderRectifier"
@@ -51,6 +52,7 @@ const DEFAULT_SETTINGS: Pick<
   enableHighConcurrencyMode: false,
   interceptAnthropicWarmupRequests: false,
   codexPriorityBillingSource: "requested",
+  costMultiplierCorrection: 0,
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
   enableBillingHeaderRectifier: true,
@@ -117,6 +119,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       currencyDisplay: "USD",
       billingModelSource: "original",
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
+      costMultiplierCorrection: DEFAULT_SETTINGS.costMultiplierCorrection,
       timezone: null,
       verboseProviderError: false,
       enableAutoCleanup: false,

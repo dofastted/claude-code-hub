@@ -1,7 +1,7 @@
 import "server-only";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { queryProviderAvailability, type ProviderAvailabilitySummary } from "@/lib/availability";
+import { type ProviderAvailabilitySummary, queryProviderAvailability } from "@/lib/availability";
 import { getLeaderboardWithCache } from "@/lib/redis";
 import type { CurrencyCode } from "@/lib/utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -24,6 +24,7 @@ interface PublicSystemStatusBucket {
 export interface PublicSystemStatusProvider {
   providerId: number;
   providerName: string;
+  websiteUrl: string | null;
   providerType: ProviderType;
   currentStatus: "green" | "red" | "unknown";
   availability: number;
@@ -146,6 +147,7 @@ export async function getPublicSystemStatusSnapshot(
       return {
         providerId: provider.providerId,
         providerName: provider.providerName,
+        websiteUrl: provider.websiteUrl,
         providerType: provider.providerType as ProviderType,
         currentStatus: provider.currentStatus,
         availability: provider.currentAvailability,

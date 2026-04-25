@@ -44,6 +44,7 @@
       "requests": "Requests",
       "successRate": "Success",
       "latency": "Avg latency",
+      "website": "Website",
       "lastRequestValue": "Last request {value}",
       "noRecentTraffic": "No recent traffic"
     }

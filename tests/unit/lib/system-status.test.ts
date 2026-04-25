@@ -41,6 +41,7 @@ describe("getPublicSystemStatusSnapshot", () => {
         {
           providerId: 3,
           providerName: "Anthropic Edge",
+          websiteUrl: "https://anthropic.example.com",
           weight: 5,
           providerType: "claude",
           isEnabled: true,
@@ -61,6 +62,7 @@ describe("getPublicSystemStatusSnapshot", () => {
         {
           providerId: 2,
           providerName: "Codex Fast",
+          websiteUrl: null,
           weight: 1,
           providerType: "codex",
           isEnabled: true,
@@ -81,6 +83,7 @@ describe("getPublicSystemStatusSnapshot", () => {
         {
           providerId: 1,
           providerName: "Claude Prime",
+          websiteUrl: "https://claude.example.com",
           weight: 5,
           providerType: "claude",
           isEnabled: true,
@@ -197,6 +200,7 @@ describe("getPublicSystemStatusSnapshot", () => {
     ]);
     expect(snapshot.providers[0]).toMatchObject({
       providerId: 3,
+      websiteUrl: "https://anthropic.example.com",
       cacheHitRate: 0.5,
       avgTokensPerSecond: 70,
       avgCostPerMillionTokens: 15,

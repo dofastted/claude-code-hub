@@ -1,22 +1,30 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
   Clock3,
+  ExternalLink,
   Gauge,
+  type LucideIcon,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Star,
   TriangleAlert,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import { startTransition, useEffect, useEffectEvent, useMemo, useState, type CSSProperties } from "react";
+import {
+  type CSSProperties,
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { PublicSystemStatusProvider, PublicSystemStatusSnapshot } from "@/lib/system-status";
 import { cn } from "@/lib/utils";
@@ -138,7 +146,9 @@ function getSystemStatus(
   return "unknown";
 }
 
-function getStatusTone(status: PublicSystemStatusProvider["currentStatus"] | "green" | "red" | "unknown") {
+function getStatusTone(
+  status: PublicSystemStatusProvider["currentStatus"] | "green" | "red" | "unknown"
+) {
   if (status === "green") {
     return {
       chip: "bg-[var(--neo-mint)] text-black",
@@ -204,10 +214,7 @@ function getHistoryDayKey(value: string) {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
-function buildHistorySegments(
-  locale: string,
-  history: PublicSystemStatusProvider["history"]
-) {
+function buildHistorySegments(locale: string, history: PublicSystemStatusProvider["history"]) {
   const grouped: Array<{
     key: string;
     bucketStart: string;
@@ -224,7 +231,8 @@ function buildHistorySegments(
         key: groupKey,
         bucketStart: bucket.bucketStart,
         totalRequests: bucket.totalRequests,
-        weightedAvailability: bucket.totalRequests > 0 ? bucket.availabilityScore * bucket.totalRequests : 0,
+        weightedAvailability:
+          bucket.totalRequests > 0 ? bucket.availabilityScore * bucket.totalRequests : 0,
       });
       continue;
     }
@@ -235,7 +243,8 @@ function buildHistorySegments(
   }
 
   return grouped.map((group) => {
-    const availability = group.totalRequests > 0 ? group.weightedAvailability / group.totalRequests : null;
+    const availability =
+      group.totalRequests > 0 ? group.weightedAvailability / group.totalRequests : null;
 
     return {
       key: group.key,
@@ -323,7 +332,9 @@ function SummaryCard({
   return (
     <div className={cn(PANEL, PANEL_PRESSABLE, "p-4", toneClass, rotate)}>
       <div className="flex items-start justify-between gap-3">
-        <span className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>{label}</span>
+        <span className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>
+          {label}
+        </span>
         <div className="border-4 border-black bg-white p-2">
           <Icon className="h-4 w-4 stroke-[2.75px]" />
         </div>
@@ -379,7 +390,10 @@ function ProviderCard({
       ? provider.history.at(-1)!.availabilityScore
       : provider.availability;
 
-  const historySegments = useMemo(() => buildHistorySegments(locale, provider.history), [locale, provider.history]);
+  const historySegments = useMemo(
+    () => buildHistorySegments(locale, provider.history),
+    [locale, provider.history]
+  );
 
   return (
     <motion.article
@@ -404,7 +418,11 @@ function ProviderCard({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusSticker animated label={t(`status.${provider.currentStatus}`)} status={provider.currentStatus} />
+              <StatusSticker
+                animated
+                label={t(`status.${provider.currentStatus}`)}
+                status={provider.currentStatus}
+              />
               <Sticker className="bg-[var(--neo-violet)]" rotate="rotate-2">
                 <TypeIcon className="h-3.5 w-3.5 stroke-[2.5px]" />
                 {typeLabel}
@@ -440,13 +458,29 @@ function ProviderCard({
                       ? formatTimestamp(locale, provider.lastRequestAt)
                       : t("provider.meta.noRecentTraffic")}
                   </span>
+                  {provider.websiteUrl && (
+                    <a
+                      href={provider.websiteUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 border-2 border-black bg-[var(--neo-yellow)] px-2.5 py-1 transition-transform hover:-translate-y-0.5"
+                    >
+                      <ExternalLink className="h-4 w-4 stroke-[2.5px]" />
+                      {t("provider.meta.website")}
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="w-full max-w-[240px] border-4 border-black bg-black p-4 text-white shadow-[8px_8px_0px_0px_#FFD93D]">
-            <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--neo-yellow)]")}>
+            <div
+              className={cn(
+                MONO,
+                "text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--neo-yellow)]"
+              )}
+            >
               {t("metrics.availability")}
             </div>
             <div className={cn(DISPLAY, "mt-3 text-5xl font-bold leading-none tracking-[-0.08em]")}>
@@ -495,7 +529,12 @@ function ProviderCard({
           />
         </div>
 
-        <div className={cn("mt-5 border-4 border-black p-4 shadow-[6px_6px_0px_0px_#000]", tone.accentSoft)}>
+        <div
+          className={cn(
+            "mt-5 border-4 border-black p-4 shadow-[6px_6px_0px_0px_#000]",
+            tone.accentSoft
+          )}
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Sticker className="bg-white" rotate="-rotate-1">
               <Gauge className="h-3.5 w-3.5 stroke-[2.5px]" />
@@ -505,7 +544,10 @@ function ProviderCard({
               <Sticker className="bg-white" rotate="rotate-1">
                 {t("provider.meta.requests")} {formatCompactNumber(locale, provider.totalRequests)}
               </Sticker>
-              <Sticker className={cn("bg-white", provider.lastRequestAt ? "" : "bg-[var(--neo-yellow)]")} rotate="-rotate-1">
+              <Sticker
+                className={cn("bg-white", provider.lastRequestAt ? "" : "bg-[var(--neo-yellow)]")}
+                rotate="-rotate-1"
+              >
                 LIVE {formatPercent(locale, latestAvailability)}
               </Sticker>
             </div>
@@ -542,16 +584,32 @@ function ProviderCard({
                       }}
                     />
                     <div className="relative z-10 flex items-start justify-between gap-3">
-                      <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.14em]")}>{segment.label}</div>
+                      <div
+                        className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.14em]")}
+                      >
+                        {segment.label}
+                      </div>
                       <div className="border-2 border-black bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
-                        {segment.totalRequests > 0 ? formatCompactNumber(locale, segment.totalRequests) : "NO DATA"}
+                        {segment.totalRequests > 0
+                          ? formatCompactNumber(locale, segment.totalRequests)
+                          : "NO DATA"}
                       </div>
                     </div>
                     <div className="relative z-10">
-                      <div className={cn(DISPLAY, "text-3xl font-bold leading-none tracking-[-0.08em]")}>
+                      <div
+                        className={cn(
+                          DISPLAY,
+                          "text-3xl font-bold leading-none tracking-[-0.08em]"
+                        )}
+                      >
                         {formatPercent(locale, segment.availability)}
                       </div>
-                      <div className={cn(MONO, "mt-2 text-[10px] font-bold uppercase tracking-[0.14em]")}>
+                      <div
+                        className={cn(
+                          MONO,
+                          "mt-2 text-[10px] font-bold uppercase tracking-[0.14em]"
+                        )}
+                      >
                         {t("provider.meta.requests")}
                       </div>
                     </div>
@@ -670,8 +728,7 @@ export function SystemStatusView({
             </Sticker>
             <Sticker className="bg-white" rotate="rotate-1">
               {t("hero.pathLabel")}
-              <ArrowRight className="h-3.5 w-3.5 stroke-[2.75px]" />
-              /{locale}/system-status
+              <ArrowRight className="h-3.5 w-3.5 stroke-[2.75px]" />/{locale}/system-status
             </Sticker>
             <StatusSticker animated label={t(`status.${systemStatus}`)} status={systemStatus} />
           </div>
@@ -707,7 +764,10 @@ export function SystemStatusView({
                     ? t("hero.updatedAt", { value: formatTimestamp(locale, data.queriedAt) })
                     : t("hero.awaitingData")}
                 </Sticker>
-                <Sticker className={cn(refreshing ? "bg-[var(--neo-red)]" : "bg-white")} rotate="rotate-1">
+                <Sticker
+                  className={cn(refreshing ? "bg-[var(--neo-red)]" : "bg-white")}
+                  rotate="rotate-1"
+                >
                   <RefreshCw
                     className={cn(
                       "h-3.5 w-3.5 stroke-[2.75px] motion-reduce:animate-none",
@@ -728,7 +788,9 @@ export function SystemStatusView({
               <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>
                 {t("summary.systemAvailability")}
               </div>
-              <div className={cn(DISPLAY, "mt-4 text-6xl font-bold leading-none tracking-[-0.1em]")}>
+              <div
+                className={cn(DISPLAY, "mt-4 text-6xl font-bold leading-none tracking-[-0.1em]")}
+              >
                 {liveAvailability}
               </div>
               <div className="mt-5 border-4 border-black bg-white px-3 py-3">
@@ -798,7 +860,11 @@ export function SystemStatusView({
               toneClass="bg-[var(--neo-red)]"
               value={
                 data
-                  ? formatCurrency(locale, data.currencyDisplay, summary?.weightedCostPerMillionTokens)
+                  ? formatCurrency(
+                      locale,
+                      data.currencyDisplay,
+                      summary?.weightedCostPerMillionTokens
+                    )
                   : "--"
               }
             />

@@ -44,6 +44,7 @@
       "requests": "请求数",
       "successRate": "成功率",
       "latency": "平均延迟",
+      "website": "官网",
       "lastRequestValue": "最近请求 {value}",
       "noRecentTraffic": "最近没有流量"
     }
