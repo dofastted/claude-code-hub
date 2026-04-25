@@ -105,16 +105,12 @@ describe("proxy auth cookie passthrough", () => {
     expect(collisionResponse.headers.get("location")).toContain("/login");
   });
 
-  it("allows /status without any cookie", async () => {
-    const localeResponse = new Response(null, {
-      status: 200,
-      headers: { "x-test": "status-ok" },
-    });
-    mockIntlMiddleware.mockReturnValue(localeResponse);
-
+  it("redirects /status without requiring a cookie", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/status"));
 
-    expect(response.headers.get("x-test")).toBe("status-ok");
+    expect(response.status).toBeGreaterThanOrEqual(300);
+    expect(response.status).toBeLessThan(400);
+    expect(response.headers.get("location")).toContain("/zh-CN/status");
   });
 });

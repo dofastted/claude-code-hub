@@ -18,6 +18,13 @@ function matchesPublicPath(pathname: string, pattern: string) {
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
+function redirectToDefaultLocaleStatus(request: NextRequest, sourcePrefix: "/status" | "/system-status") {
+  const url = request.nextUrl.clone();
+  const suffix = request.nextUrl.pathname.slice(sourcePrefix.length);
+  url.pathname = `/${routing.defaultLocale}/status${suffix}`;
+  return NextResponse.redirect(url);
+}
+
 function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
@@ -36,6 +43,14 @@ function proxyHandler(request: NextRequest) {
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
   if (pathname.startsWith(API_PROXY_PATH)) {
     return NextResponse.next();
+  }
+
+  if (pathname === "/system-status" || pathname.startsWith("/system-status/")) {
+    return redirectToDefaultLocaleStatus(request, "/system-status");
+  }
+
+  if (pathname === "/status" || pathname.startsWith("/status/")) {
+    return redirectToDefaultLocaleStatus(request, "/status");
   }
 
   const isLocalePrefixedPublicStatusPath = routing.locales.some(
@@ -57,12 +72,6 @@ function proxyHandler(request: NextRequest) {
 
   // Apply locale middleware first (handles locale detection and routing)
   const localeResponse = intlMiddleware(sanitizedRequest);
-
-  const isExplicitPublicStatusPath = pathname === "/status" || pathname.startsWith("/status/");
-
-  if (isExplicitPublicStatusPath) {
-    return localeResponse;
-  }
 
   // Extract locale from pathname (format: /[locale]/path or just /path)
   const localeMatch = pathname.match(/^\/([^/]+)/);
