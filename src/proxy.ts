@@ -25,6 +25,14 @@ function redirectToDefaultLocaleStatus(request: NextRequest, sourcePrefix: "/sta
   return NextResponse.redirect(url);
 }
 
+function redirectLegacyLocaleStatus(request: NextRequest, locale: Locale) {
+  const url = request.nextUrl.clone();
+  const legacyPrefix = `/${locale}/system-status`;
+  const suffix = request.nextUrl.pathname.slice(legacyPrefix.length);
+  url.pathname = `/${locale}/status${suffix}`;
+  return NextResponse.redirect(url);
+}
+
 function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
@@ -51,6 +59,13 @@ function proxyHandler(request: NextRequest) {
 
   if (pathname === "/status" || pathname.startsWith("/status/")) {
     return redirectToDefaultLocaleStatus(request, "/status");
+  }
+
+  const legacyLocale = routing.locales.find(
+    (locale) => pathname === `/${locale}/system-status` || pathname.startsWith(`/${locale}/system-status/`)
+  );
+  if (legacyLocale) {
+    return redirectLegacyLocaleStatus(request, legacyLocale);
   }
 
   const isLocalePrefixedPublicStatusPath = routing.locales.some(

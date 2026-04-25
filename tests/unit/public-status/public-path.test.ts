@@ -55,6 +55,20 @@ describe("public status proxy path", () => {
     expect(legacyResponse.headers.get("location")).toBe("http://localhost/zh-CN/status/provider-a");
   });
 
+  it("redirects locale-prefixed legacy system status paths to locale status", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+
+    const response = proxyHandler(new NextRequest("http://localhost/en/system-status?range=24h"));
+    expect(response.status).toBeGreaterThanOrEqual(300);
+    expect(response.status).toBeLessThan(400);
+    expect(response.headers.get("location")).toBe("http://localhost/en/status?range=24h");
+
+    const nestedResponse = proxyHandler(new NextRequest("http://localhost/zh-CN/system-status/provider-a"));
+    expect(nestedResponse.status).toBeGreaterThanOrEqual(300);
+    expect(nestedResponse.status).toBeLessThan(400);
+    expect(nestedResponse.headers.get("location")).toBe("http://localhost/zh-CN/status/provider-a");
+  });
+
   it("still redirects protected routes without auth", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(new NextRequest("http://localhost/en/dashboard"));
