@@ -94,6 +94,12 @@ npm run dev -- --hostname 127.0.0.1 --port 3301
 npm run cch:smoke
 ```
 
+本地测试标准和同步延迟基准见 `docs/cch-portal-local-test-standard.md`。需要让延迟超标也返回非 0 时执行：
+
+```bash
+CCH_SMOKE_ENFORCE_LATENCY=true npm run cch:smoke
+```
+
 脚本会验证：
 
 - CCH 直连套餐读取
@@ -106,6 +112,8 @@ npm run cch:smoke
 - bridge token 缺失返回 401
 - CCH 原始 API 错误 token 返回 401
 - 新开订阅、CCH 用户、默认 key 都在 `portal` 分组
+
+脚本会输出 `latency summary`，其中 `readAfterWrite` 是新订单开通响应返回后，到订阅列表读到该订单的同步延迟。
 
 ## 6. 真实上游验证
 
@@ -160,14 +168,16 @@ web 侧 agent 可以按下面顺序测：
 
 1. 读 `docs/cch-portal-api-contract.md`。
 2. 读 `docs/cch-portal-local-usage-guide.md`。
-3. 读 `docs/cch-web-agent-handoff.md`。
-4. 启动 fk-web-glm 后执行 `npm run cch:smoke`。
-5. 在页面或 API 层读取 `GET /api/cch/portal/plans`，确认页面展示来自 CCH。
-6. 调用 `POST /api/cch/portal/subscriptions/provision`，保存返回的 `sourceOrderId`、`portalUserId`、`cchUserId`、`defaultKeyId`。
-7. 再读 `GET /api/cch/portal/subscriptions`，确认刚开通的订单可见。
-8. 重复请求同一个 `sourceOrderId`，确认 `idempotent=true`。
-9. 请求 `disabled-local`，确认返回错误并且页面不当作成功。
-10. 检查回调结果：`callback.ok=true` 表示 CCH 已通知 fk-web-glm；`callback.skipped=true` 表示 CCH 未配置回调 URL 或 token。
+3. 读 `docs/cch-portal-local-test-standard.md`。
+4. 读 `docs/cch-web-agent-handoff.md`。
+5. 启动 fk-web-glm 后执行 `npm run cch:smoke`。
+6. 第二次执行 `npm run cch:smoke`，用 `latency summary` 作为 warm run 基准。
+7. 在页面或 API 层读取 `GET /api/cch/portal/plans`，确认页面展示来自 CCH。
+8. 调用 `POST /api/cch/portal/subscriptions/provision`，保存返回的 `sourceOrderId`、`portalUserId`、`cchUserId`、`defaultKeyId`。
+9. 再读 `GET /api/cch/portal/subscriptions`，确认刚开通的订单可见。
+10. 重复请求同一个 `sourceOrderId`，确认 `idempotent=true`。
+11. 请求 `disabled-local`，确认返回错误并且页面不当作成功。
+12. 检查回调结果：`callback.ok=true` 表示 CCH 已通知 fk-web-glm；`callback.skipped=true` 表示 CCH 未配置回调 URL 或 token。
 
 ## 8. 常见问题
 
