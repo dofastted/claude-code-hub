@@ -424,8 +424,10 @@ export class RateLimitService {
   }
 
   /**
-   * 检查总消费限额（带 Redis 缓存优化）
-   * 使用 5 分钟 TTL 缓存减少数据库查询频率
+   * 检查总消费限额。
+   *
+   * 总消费限额是永久硬上限，必须直接读取 DB/usage_ledger。这里不能读取短 TTL
+   * Redis 缓存，否则一次请求记账后、缓存过期前可能继续放行并超出总额。
    */
   static async checkTotalCostLimit(
     entityId: number,
@@ -439,74 +441,19 @@ export class RateLimitService {
 
     try {
       let current = 0;
-      const cacheKey = (() => {
-        const resetAtSuffix =
-          options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
-            ? `:${options.resetAt.getTime()}`
-            : "";
-        if (entityType === "key") {
-          return `total_cost:key:${options?.keyHash}${resetAtSuffix}`;
-        }
-        if (entityType === "user") {
-          return `total_cost:user:${entityId}${resetAtSuffix}`;
-        }
-        const resetAtMs = resetAtSuffix || ":none";
-        return `total_cost:provider:${entityId}${resetAtMs}`;
-      })();
-      const cacheTtl = 300; // 5 minutes
 
-      // 尝试从 Redis 缓存获取
-      const redis = RateLimitService.redis;
-      if (redis && redis.status === "ready") {
-        try {
-          const cached = await redis.get(cacheKey);
-          if (cached !== null) {
-            current = Number(cached);
-          } else {
-            // 缓存未命中，查询数据库
-            if (entityType === "key") {
-              if (!options?.keyHash) {
-                logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
-                return { allowed: true };
-              }
-              current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-            } else if (entityType === "user") {
-              current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-            } else {
-              current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-            }
-            // 异步写入缓存，不阻塞请求
-            redis.setex(cacheKey, cacheTtl, current.toString()).catch((err) => {
-              logger.warn("[RateLimit] Failed to cache total cost:", err);
-            });
-          }
-        } catch (redisError) {
-          // Redis 读取失败，降级到数据库查询
-          logger.warn("[RateLimit] Redis cache read failed, falling back to database:", redisError);
-          if (entityType === "key") {
-            if (!options?.keyHash) {
-              return { allowed: true };
-            }
-            current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-          } else if (entityType === "user") {
-            current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-          } else {
-            current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-          }
+      // Total cost is a permanent hard cap. Reading a short-lived Redis cache here can
+      // allow spending past the limit after a request records cost but before cache expiry.
+      if (entityType === "key") {
+        if (!options?.keyHash) {
+          logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
+          return { allowed: true };
         }
+        current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
+      } else if (entityType === "user") {
+        current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
       } else {
-        // Redis 不可用，直接查询数据库
-        if (entityType === "key") {
-          if (!options?.keyHash) {
-            logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
-            return { allowed: true };
-          }
-          current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-        } else if (entityType === "user") {
-          current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-        } else {
-          current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-        }
+        current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
       }
 
       if (current >= limitTotalUsd) {
@@ -521,7 +468,10 @@ export class RateLimitService {
       return { allowed: true, current };
     } catch (error) {
       logger.error("[RateLimit] Total cost limit check failed:", error);
-      return { allowed: true }; // fail open
+      return {
+        allowed: false,
+        reason: `${entityType} total spending limit check failed`,
+      };
     }
   }
 

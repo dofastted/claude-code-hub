@@ -1,4 +1,4 @@
-import TOML from "@iarna/toml";
+import parseToml from "@iarna/toml/parse-string";
 import type { ModelPriceData } from "@/types/model-price";
 
 export const CLOUD_PRICE_TABLE_URL = "https://claude-code-hub.app/config/prices-base.toml";
@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function parseCloudPriceTableToml(tomlText: string): CloudPriceTableResult<CloudPriceTable> {
   try {
-    const parsed = TOML.parse(tomlText) as unknown;
+    const parsed = parseToml(tomlText) as unknown;
     if (!isRecord(parsed)) {
       return { ok: false, error: "价格表格式无效：根节点不是对象" };
     }

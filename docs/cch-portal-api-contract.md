@@ -35,6 +35,8 @@ fk-web-glm 侧：
 
 token 只写 `.env.local`，不要提交。
 
+`PORTAL_PROVIDER_GROUP` 和 `PORTAL_TEST_KEY_GROUP` 可以改成部署自己的分组名。CCH 会为这些分组补建 provider group 和临时 key 所需的 user group config。
+
 ## 鉴权
 
 CCH 原始 API 使用 `Authorization: Bearer <purpose-token>`。
@@ -144,7 +146,7 @@ fk-web-glm 代理 API：
 
 字段规则：
 
-- `sourceOrderId` 必填，全局幂等键。重复请求同一个值时返回已有订阅。
+- `sourceOrderId` 必填，全局幂等键。重复请求同一个值，且 `portalUserId`、`email`、`planId` 与已有订阅一致时返回已有订阅；不一致时返回 `409 IDEMPOTENCY_CONFLICT`。
 - `portalUserId` 必填，门户用户在 fk-web-glm 侧的稳定 id。
 - `email` 必填，CCH 用户名会使用该邮箱。
 - `planId` 必填，必须是启用套餐。

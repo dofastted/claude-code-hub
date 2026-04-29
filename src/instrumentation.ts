@@ -46,6 +46,21 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   logger.info("Error rule detector cache loaded successfully");
 }
 
+function isCloudPriceSyncDisabled(): boolean {
+  const value = process.env.DISABLE_CLOUD_PRICE_SYNC?.trim().toLowerCase();
+  return value === "true" || value === "1";
+}
+
+async function ensurePriceTableIfEnabled(): Promise<void> {
+  if (isCloudPriceSyncDisabled()) {
+    logger.info("[Instrumentation] Cloud price sync disabled, skipping price table init");
+    return;
+  }
+
+  const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
+  await ensurePriceTable();
+}
+
 /**
  * 启动云端价格表定时同步（每 30 分钟一次）。
  *
@@ -54,6 +69,11 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
  * - 失败不阻塞启动，仅记录日志
  */
 async function startCloudPriceSyncScheduler(): Promise<void> {
+  if (isCloudPriceSyncDisabled()) {
+    logger.info("[Instrumentation] Cloud price sync disabled, scheduler not started");
+    return;
+  }
+
   if (instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__) {
     return;
   }
@@ -373,8 +393,7 @@ export async function register() {
       }
 
       // 初始化价格表（如果数据库为空）
-      const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
-      await ensurePriceTable();
+      await ensurePriceTableIfEnabled();
 
       // 启动云端价格表定时同步
       await startCloudPriceSyncScheduler();
@@ -510,8 +529,7 @@ export async function register() {
       }
 
       // 初始化价格表（如果数据库为空）
-      const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
-      await ensurePriceTable();
+      await ensurePriceTableIfEnabled();
 
       // 启动云端价格表定时同步（仅在数据库可用时启用，避免本地无 DB 时反复报错）
       if (isConnected) {

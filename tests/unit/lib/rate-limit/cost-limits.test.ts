@@ -184,20 +184,22 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result).toEqual({ allowed: true });
   });
 
-  it("checkTotalCostLimit：Redis cache hit 且已超限时应返回 not allowed", async () => {
+  it("checkTotalCostLimit：即使 Redis 有旧值也应以 DB 总消费为准", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockImplementation(async (key: string) => {
       if (key === "total_cost:user:7") return "20";
       return null;
     });
+    statisticsMock.sumUserTotalCost.mockResolvedValueOnce(5);
 
     const result = await RateLimitService.checkTotalCostLimit(7, "user", 10);
-    expect(result.allowed).toBe(false);
-    expect(result.current).toBe(20);
+    expect(result.allowed).toBe(true);
+    expect(result.current).toBe(5);
+    expect(redisClient.get).not.toHaveBeenCalled();
   });
 
-  it("checkTotalCostLimit：Redis miss 时应 fallback DB 并写回缓存", async () => {
+  it("checkTotalCostLimit：应直接查 DB 且不写 total cache", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockResolvedValueOnce(null);
@@ -206,10 +208,11 @@ describe("RateLimitService - cost limits and quota checks", () => {
     const result = await RateLimitService.checkTotalCostLimit(7, "user", 10);
     expect(result.allowed).toBe(true);
     expect(result.current).toBe(5);
-    expect(redisClient.setex).toHaveBeenCalledWith("total_cost:user:7", 300, "5");
+    expect(redisClient.get).not.toHaveBeenCalled();
+    expect(redisClient.setex).not.toHaveBeenCalled();
   });
 
-  it("checkTotalCostLimit：Provider Redis miss 时应 fallback DB 并写回缓存（cache key 应包含 resetAt）", async () => {
+  it("checkTotalCostLimit：Provider 应带 resetAt 直接查 DB", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     const resetAt = new Date(nowMs - 123_000);
@@ -225,14 +228,10 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.current).toBe(5);
     expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledTimes(1);
     expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledWith(9, resetAt);
-    expect(redisClient.setex).toHaveBeenCalledWith(
-      `total_cost:provider:9:${resetAt.getTime()}`,
-      300,
-      "5"
-    );
+    expect(redisClient.setex).not.toHaveBeenCalled();
   });
 
-  it("checkTotalCostLimit：Provider resetAt 为空时应使用 none key 并回退到 DB", async () => {
+  it("checkTotalCostLimit：Provider resetAt 为空时应以 null 查询 DB", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockResolvedValueOnce(null);
@@ -245,10 +244,10 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.allowed).toBe(true);
     expect(result.current).toBe(5);
     expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledWith(9, null);
-    expect(redisClient.setex).toHaveBeenCalledWith("total_cost:provider:9:none", 300, "5");
+    expect(redisClient.setex).not.toHaveBeenCalled();
   });
 
-  it("checkTotalCostLimit：Provider Redis cache hit 且已超限时应返回 not allowed（按 resetAt key 命中）", async () => {
+  it("checkTotalCostLimit：Provider 超限应来自 DB 结果", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     const resetAt = new Date(nowMs - 456_000);
@@ -257,12 +256,24 @@ describe("RateLimitService - cost limits and quota checks", () => {
       if (key === `total_cost:provider:9:${resetAt.getTime()}`) return "20";
       return null;
     });
+    statisticsMock.sumProviderTotalCost.mockResolvedValueOnce(20);
 
     const result = await RateLimitService.checkTotalCostLimit(9, "provider", 10, {
       resetAt,
     });
     expect(result.allowed).toBe(false);
     expect(result.current).toBe(20);
+    expect(redisClient.get).not.toHaveBeenCalled();
+  });
+
+  it("checkTotalCostLimit：DB 查询失败时应拒绝请求", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    statisticsMock.sumUserTotalCost.mockRejectedValueOnce(new Error("db unavailable"));
+
+    const result = await RateLimitService.checkTotalCostLimit(7, "user", 10);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("total spending limit check failed");
   });
 
   it("checkUserDailyCost：fixed 模式 cache hit 超限时应拦截", async () => {

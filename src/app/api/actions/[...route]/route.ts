@@ -26,6 +26,7 @@ import * as myUsageActions from "@/actions/my-usage";
 import * as notificationBindingActions from "@/actions/notification-bindings";
 import * as notificationActions from "@/actions/notifications";
 import * as overviewActions from "@/actions/overview";
+import * as portalActions from "@/actions/portal";
 import * as providerEndpointActions from "@/actions/provider-endpoints";
 import * as providerActions from "@/actions/providers";
 import * as sensitiveWordActions from "@/actions/sensitive-words";
@@ -158,6 +159,32 @@ const getUsersBatchRequestSchema = z
     sortOrder: z.enum(["asc", "desc"]).optional(),
   })
   .passthrough();
+
+const portalPlanInputSchema = z.object({
+  planId: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  priceAmount: z.number().nonnegative().optional(),
+  currency: z.string().min(1).optional(),
+  validDays: z.number().int().min(0).optional(),
+  providerGroup: z.string().min(1).optional(),
+  weeklyLimitUsd: z.number().nonnegative().optional(),
+  monthlyLimitUsd: z.number().nonnegative().optional(),
+  totalLimitUsd: z.number().nonnegative().optional(),
+  rpmLimit: z.number().int().positive().optional(),
+  enabled: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  features: z.array(z.string()).optional(),
+});
+
+const portalProvisionInputSchema = z.object({
+  sourceOrderId: z.string().min(1),
+  portalUserId: z.string().min(1),
+  email: z.string().email(),
+  planId: z.string().min(1),
+  assignedSource: z.string().optional(),
+  notes: z.string().nullable().optional(),
+});
 
 const getUsersBatchResponseSchema = z.object({
   users: z.array(userListItemSchema),
@@ -518,6 +545,158 @@ const { route: resetKeyLimitsOnlyRoute, handler: resetKeyLimitsOnlyHandler } = c
   }
 );
 app.openapi(resetKeyLimitsOnlyRoute, resetKeyLimitsOnlyHandler);
+
+// ==================== 门户订阅管理 ====================
+
+const { route: listPortalPlansRoute, handler: listPortalPlansHandler } = createActionRoute(
+  "portal-plans",
+  "listPortalPlans",
+  portalActions.listPortalPlans,
+  {
+    requestSchema: z.object({
+      includeDisabled: z.boolean().optional(),
+    }),
+    responseSchema: z.any(),
+    description: "列出门户套餐模板",
+    summary: "列出门户套餐",
+    tags: ["门户订阅"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(listPortalPlansRoute, listPortalPlansHandler);
+
+const { route: upsertPortalPlanRoute, handler: upsertPortalPlanHandler } = createActionRoute(
+  "portal-plans",
+  "upsertPortalPlan",
+  portalActions.upsertPortalPlan,
+  {
+    requestSchema: portalPlanInputSchema,
+    responseSchema: z.any(),
+    description: "创建或更新门户套餐模板",
+    summary: "保存门户套餐",
+    tags: ["门户订阅"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(upsertPortalPlanRoute, upsertPortalPlanHandler);
+
+const { route: setPortalPlanEnabledRoute, handler: setPortalPlanEnabledHandler } =
+  createActionRoute("portal-plans", "setPortalPlanEnabled", portalActions.setPortalPlanEnabled, {
+    requestSchema: z.object({
+      planId: z.string().min(1),
+      enabled: z.boolean(),
+    }),
+    responseSchema: z.any(),
+    description: "启用或停用门户套餐模板",
+    summary: "设置门户套餐状态",
+    tags: ["门户订阅"],
+    requiredRole: "admin",
+  });
+app.openapi(setPortalPlanEnabledRoute, setPortalPlanEnabledHandler);
+
+const { route: deletePortalPlanRoute, handler: deletePortalPlanHandler } = createActionRoute(
+  "portal-plans",
+  "deletePortalPlan",
+  portalActions.deletePortalPlan,
+  {
+    requestSchema: z.object({
+      planId: z.string().min(1),
+    }),
+    responseSchema: z.any(),
+    description: "软删除门户套餐模板",
+    summary: "删除门户套餐",
+    tags: ["门户订阅"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(deletePortalPlanRoute, deletePortalPlanHandler);
+
+const { route: provisionPortalSubscriptionRoute, handler: provisionPortalSubscriptionHandler } =
+  createActionRoute(
+    "portal-subscriptions",
+    "provisionPortalSubscription",
+    portalActions.provisionPortalSubscription,
+    {
+      requestSchema: portalProvisionInputSchema,
+      responseSchema: z.any(),
+      description: "按门户订单开通或复用 CCH 用户与默认 key",
+      summary: "开通门户订阅",
+      tags: ["门户订阅"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(provisionPortalSubscriptionRoute, provisionPortalSubscriptionHandler);
+
+const { route: listPortalSubscriptionsRoute, handler: listPortalSubscriptionsHandler } =
+  createActionRoute(
+    "portal-subscriptions",
+    "listPortalSubscriptions",
+    portalActions.listPortalSubscriptions,
+    {
+      requestSchema: z.object({
+        limit: z.number().int().positive().max(500).optional(),
+      }),
+      responseSchema: z.any(),
+      description: "列出门户订阅开通记录",
+      summary: "列出门户订阅",
+      tags: ["门户订阅"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(listPortalSubscriptionsRoute, listPortalSubscriptionsHandler);
+
+const { route: listPortalUserLinksRoute, handler: listPortalUserLinksHandler } = createActionRoute(
+  "portal-subscriptions",
+  "listPortalUserLinks",
+  portalActions.listPortalUserLinks,
+  {
+    requestSchema: z.object({
+      limit: z.number().int().positive().max(500).optional(),
+    }),
+    responseSchema: z.any(),
+    description: "列出门户用户与 CCH 用户映射",
+    summary: "列出门户用户池",
+    tags: ["门户订阅"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(listPortalUserLinksRoute, listPortalUserLinksHandler);
+
+const { route: getPortalSubscriptionRoute, handler: getPortalSubscriptionHandler } =
+  createActionRoute(
+    "portal-subscriptions",
+    "getPortalSubscription",
+    portalActions.getPortalSubscription,
+    {
+      requestSchema: z.object({
+        id: z.number().int().positive(),
+      }),
+      responseSchema: z.any(),
+      description: "读取门户订阅开通记录",
+      summary: "读取门户订阅",
+      tags: ["门户订阅"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getPortalSubscriptionRoute, getPortalSubscriptionHandler);
+
+const { route: revokePortalSubscriptionRoute, handler: revokePortalSubscriptionHandler } =
+  createActionRoute(
+    "portal-subscriptions",
+    "revokePortalSubscription",
+    portalActions.revokePortalSubscription,
+    {
+      requestSchema: z.object({
+        id: z.number().int().positive(),
+      }),
+      responseSchema: z.any(),
+      description: "将门户订阅标记为已撤销",
+      summary: "撤销门户订阅",
+      tags: ["门户订阅"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(revokePortalSubscriptionRoute, revokePortalSubscriptionHandler);
 
 // ==================== 供应商管理 ====================
 
@@ -2251,6 +2430,10 @@ HTTP 状态码:
     {
       name: "密钥管理",
       description: "为用户生成 API 密钥,支持独立的金额限制、过期时间和 Web UI 登录权限配置",
+    },
+    {
+      name: "门户订阅",
+      description: "管理门户套餐模板、门户用户池与订单开通记录",
     },
     {
       name: "供应商管理",

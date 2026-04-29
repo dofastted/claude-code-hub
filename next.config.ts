@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import { builtinModules } from "node:module";
 
 // Create next-intl plugin with i18n request configuration
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -19,6 +20,9 @@ const nextConfig: NextConfig = {
     "@bull-board/api",
     "@bull-board/express",
     "ioredis",
+    "redis-parser",
+    "redis-errors",
+    "@iarna/toml",
     "postgres",
     "drizzle-orm",
   ],
@@ -37,6 +41,32 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "500mb",
     },
     proxyClientMaxBodySize: "100mb",
+  },
+
+  webpack: (config, { webpack }) => {
+    const nodeFallbacks: Record<string, false> = Object.fromEntries(
+      builtinModules
+        .filter((name) => !name.startsWith("_") && !name.startsWith("node:"))
+        .map((name) => [name, false])
+    );
+
+    config.resolve = config.resolve ?? {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      ...Object.fromEntries(Object.keys(nodeFallbacks).map((name) => [`node:${name}`, false])),
+    };
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      ...nodeFallbacks,
+    };
+    config.plugins = config.plugins ?? [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(/^node:/, (resource: { request: string }) => {
+        resource.request = resource.request.replace(/^node:/, "");
+      })
+    );
+
+    return config;
   },
 };
 

@@ -36,6 +36,8 @@ fk-web-glm `.env.local` 必须包含：
 
 `.env.local` 不要提交。
 
+`PORTAL_PROVIDER_GROUP` 和 `PORTAL_TEST_KEY_GROUP` 可以改成本地自定义分组名。CCH 会补建这些分组对应的 provider group 和 user group config。
+
 ## 2. 写入 mock 数据
 
 在 CCH 仓库执行：
@@ -106,7 +108,7 @@ CCH_SMOKE_ENFORCE_LATENCY=true npm run cch:smoke
 - fk-web-glm 套餐代理
 - fk-web-glm 订阅列表代理
 - fk-web-glm 订阅开通代理
-- 固定订单幂等
+- 固定订单幂等；同一 `sourceOrderId` 搭配不同 `portalUserId`、`email` 或 `planId` 时应返回 `409 IDEMPOTENCY_CONFLICT`
 - 时间戳订单新增开通
 - 禁用套餐开通失败
 - bridge token 缺失返回 401

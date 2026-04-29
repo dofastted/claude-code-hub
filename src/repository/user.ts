@@ -7,6 +7,7 @@ import { cacheUser, invalidateCachedUser } from "@/lib/security/api-key-auth-cac
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
+import { findAllUserGroupConfigs } from "./user-group-configs";
 
 export interface UserListBatchFilters {
   /** Cursor for pagination (JSON-encoded keyset or numeric offset) */
@@ -655,6 +656,11 @@ export async function getAllUserProviderGroups(): Promise<string[]> {
     .where(isNull(users.deletedAt));
 
   const allGroups = new Set<string>();
+  const configuredGroups = await findAllUserGroupConfigs();
+  for (const config of configuredGroups) {
+    allGroups.add(config.groupName);
+  }
+
   for (const row of result) {
     const groups = parseProviderGroups(row.providerGroup);
     if (!groups || groups.length === 0) continue;

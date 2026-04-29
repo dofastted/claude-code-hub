@@ -116,17 +116,15 @@ describe("parseCloudPriceTableToml", () => {
 
   it("returns an error when root is not an object (defensive)", async () => {
     vi.resetModules();
-    vi.doMock("@iarna/toml", () => ({
-      default: {
-        parse: () => 123,
-      },
+    vi.doMock("@iarna/toml/parse-string", () => ({
+      default: () => 123,
     }));
 
     const mod = await import("@/lib/price-sync/cloud-price-table");
     const result = mod.parseCloudPriceTableToml("[models]");
     expect(result.ok).toBe(false);
 
-    vi.doUnmock("@iarna/toml");
+    vi.doUnmock("@iarna/toml/parse-string");
   });
 });
 

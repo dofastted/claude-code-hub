@@ -24,6 +24,7 @@ export async function DashboardHeader({ session, locale }: DashboardHeaderProps)
     { href: "/dashboard/leaderboard", label: t("leaderboard") },
     { href: "/dashboard/availability", label: t("availability"), adminOnly: true },
     { href: "/dashboard/providers", label: t("providers"), adminOnly: true },
+    { href: "/dashboard/portal", label: t("portal"), adminOnly: true },
     ...(isAdmin
       ? [{ href: "/dashboard/quotas", label: t("quotasManagement") }]
       : [{ href: "/dashboard/my-quota", label: t("myQuota") }]),
