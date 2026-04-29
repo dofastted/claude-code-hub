@@ -1,4 +1,4 @@
-import type { UpsertUserGroupConfigInput } from "@/types/user-group-config";
+import type { UpsertUserGroupConfigInput } from "@/fork/portal/types/user-group-config";
 
 export const DEFAULT_TEST_KEY_GROUP = "test-key";
 export const DEFAULT_PORTAL_GROUP = "portal";

@@ -2,7 +2,7 @@
 
 本文记录 CCH + fk-web-glm 本地 API 测试流程。相同内容需要保留在两个仓库：
 
-- CCH：`/mnt/x/project/claude-code-hub/docs/cch-portal-local-usage-guide.md`
+- CCH：`/mnt/x/project/claude-code-hub/docs/fork/cch-portal-local-usage-guide.md`
 - fk-web-glm：`/mnt/x/fk-web-glm/docs/cch-portal-local-usage-guide.md`
 
 ## 1. 准备环境
@@ -96,7 +96,7 @@ npm run dev -- --hostname 127.0.0.1 --port 3301
 npm run cch:smoke
 ```
 
-本地测试标准和同步延迟基准见 `docs/cch-portal-local-test-standard.md`。需要让延迟超标也返回非 0 时执行：
+本地测试标准和同步延迟基准见 `docs/fork/cch-portal-local-test-standard.md`。需要让延迟超标也返回非 0 时执行：
 
 ```bash
 CCH_SMOKE_ENFORCE_LATENCY=true npm run cch:smoke
@@ -168,9 +168,9 @@ curl http://127.0.0.1:23000/v1/responses \
 
 web 侧 agent 可以按下面顺序测：
 
-1. 读 `docs/cch-portal-api-contract.md`。
-2. 读 `docs/cch-portal-local-usage-guide.md`。
-3. 读 `docs/cch-portal-local-test-standard.md`。
+1. 读 `docs/fork/cch-portal-api-contract.md`。
+2. 读 `docs/fork/cch-portal-local-usage-guide.md`。
+3. 读 `docs/fork/cch-portal-local-test-standard.md`。
 4. 读 `docs/cch-web-agent-handoff.md`。
 5. 启动 fk-web-glm 后执行 `npm run cch:smoke`。
 6. 第二次执行 `npm run cch:smoke`，用 `latency summary` 作为 warm run 基准。

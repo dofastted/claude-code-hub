@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getEnvConfig } from "@/lib/config/env.schema";
+import { getPortalConfig } from "@/fork/portal/config";
 
 export type PortalWebhookEvent = "portal.subscription.provisioned" | "portal.subscription.revoked";
 
@@ -15,7 +15,7 @@ export async function notifyFkWebPortalEvent(
   event: PortalWebhookEvent,
   payload: Record<string, unknown>
 ): Promise<PortalWebhookResult> {
-  const env = getEnvConfig();
+  const env = getPortalConfig();
   const url = env.FK_WEB_PORTAL_CALLBACK_URL;
   const token = env.FK_WEB_PORTAL_CALLBACK_TOKEN;
 

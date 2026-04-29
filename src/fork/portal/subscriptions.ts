@@ -1,24 +1,24 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { DEFAULT_PORTAL_GROUP } from "@/lib/user-groups/defaults";
-import { createKey, findKeyById, findKeyList, updateKey } from "@/repository/key";
 import {
   createPortalSubscription,
   findPortalPlanByPlanId,
   findPortalSubscriptionBySourceOrderId,
   findPortalUserLinkByPortalUserId,
   upsertPortalUserLink,
-} from "@/repository/portal";
-import { createUser, findUserById, updateUser } from "@/repository/user";
-import type { Key } from "@/types/key";
+} from "@/fork/portal/repository/portal";
 import type {
   PortalPlan,
   PortalSubscription,
   PortalUserLink,
   ProvisionPortalSubscriptionInput,
   ProvisionPortalSubscriptionResult,
-} from "@/types/portal";
+} from "@/fork/portal/types/portal";
+import { DEFAULT_PORTAL_GROUP } from "@/fork/portal/user-groups/defaults";
+import { createKey, findKeyById, findKeyList, updateKey } from "@/repository/key";
+import { createUser, findUserById, updateUser } from "@/repository/user";
+import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
 export class PortalSubscriptionError extends Error {

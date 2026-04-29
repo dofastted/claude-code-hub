@@ -1,29 +1,29 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { getEnvConfig } from "@/lib/config/env.schema";
-import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
-import { buildDefaultUserGroupConfigs } from "@/lib/user-groups/defaults";
-import { syncUserProviderGroupFromKeysForSystem } from "@/lib/user-groups/sync";
-import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
-import { deleteKey, findKeyById, findKeyList } from "@/repository/key";
-import { ensureProviderGroupsExist } from "@/repository/provider-groups";
+import { getPortalConfig } from "@/fork/portal/config";
 import {
   createTemporaryKeyBatchWithKeys,
   findTemporaryKeyBatchWithKeys,
   markTemporaryKeyBatchDeleted,
-} from "@/repository/temporary-key-batches";
-import { findUserById } from "@/repository/user";
+} from "@/fork/portal/repository/temporary-key-batches";
 import {
   ensureDefaultUserGroupConfigs,
   findUserGroupConfigByName,
-} from "@/repository/user-group-configs";
-import type { CreateKeyData, Key } from "@/types/key";
+} from "@/fork/portal/repository/user-group-configs";
 import type {
   CreateTemporaryKeyBatchInput,
   CreateTemporaryKeyBatchResult,
   DeleteTemporaryKeyBatchResult,
-} from "@/types/temporary-key-batch";
+} from "@/fork/portal/types/temporary-key-batch";
+import { buildDefaultUserGroupConfigs } from "@/fork/portal/user-groups/defaults";
+import { syncUserProviderGroupFromKeysForSystem } from "@/fork/portal/user-groups/sync";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
+import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
+import { deleteKey, findKeyById, findKeyList } from "@/repository/key";
+import { ensureProviderGroupsExist } from "@/repository/provider-groups";
+import { findUserById } from "@/repository/user";
+import type { CreateKeyData, Key } from "@/types/key";
 
 export class TemporaryKeyBatchError extends Error {
   readonly code: string;
@@ -38,7 +38,7 @@ export class TemporaryKeyBatchError extends Error {
 }
 
 async function ensureBuiltinUserGroupConfigs(): Promise<void> {
-  const env = getEnvConfig();
+  const env = getPortalConfig();
   await ensureDefaultUserGroupConfigs(
     buildDefaultUserGroupConfigs({
       portalGroup: env.PORTAL_PROVIDER_GROUP,

@@ -2,17 +2,18 @@ import "server-only";
 
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, temporaryKeyBatchKeys, temporaryKeyBatches } from "@/drizzle/schema";
+import { keys } from "@/drizzle/schema";
+import { temporaryKeyBatches, temporaryKeyBatchKeys } from "@/fork/portal/schema";
+import type {
+  CreateTemporaryKeyBatchResult,
+  TemporaryKeyBatch,
+  TemporaryKeyBatchWithKeys,
+} from "@/fork/portal/types/temporary-key-batch";
 import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
 import { cacheActiveKey } from "@/lib/security/api-key-auth-cache";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import { toKey } from "@/repository/_shared/transformers";
 import type { CreateKeyData, Key } from "@/types/key";
-import type {
-  CreateTemporaryKeyBatchResult,
-  TemporaryKeyBatch,
-  TemporaryKeyBatchWithKeys,
-} from "@/types/temporary-key-batch";
 
 type TemporaryKeyBatchRow = typeof temporaryKeyBatches.$inferSelect;
 
@@ -198,10 +199,7 @@ export async function findTemporaryKeyIdsForBatch(batchId: number): Promise<numb
 export async function findKeysByIds(keyIds: number[]): Promise<Key[]> {
   if (keyIds.length === 0) return [];
 
-  const rows = await db
-    .select(keyReturningFields)
-    .from(keys)
-    .where(inArray(keys.id, keyIds));
+  const rows = await db.select(keyReturningFields).from(keys).where(inArray(keys.id, keyIds));
 
   return rows.map(toKey);
 }

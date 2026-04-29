@@ -84,37 +84,6 @@ export const EnvSchema = z.object({
     if (val === "change-me") return undefined;
     return val;
   }, z.string().min(1, "管理员令牌不能为空").optional()),
-  PORTAL_MANAGEMENT_TOKEN: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "门户管理令牌不能为空").optional()),
-  PORTAL_PROVIDER_GROUP: z.string().default("portal"),
-  PORTAL_TEST_KEY_GROUP: z.string().default("test-key"),
-  FKCODEX_PORTAL_PLAN_READ_TOKEN: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "fkcodex 套餐读取令牌不能为空").optional()),
-  FKCODEX_PORTAL_SUBSCRIPTION_READ_TOKEN: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "fkcodex 订阅读取令牌不能为空").optional()),
-  FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "fkcodex 订阅写入令牌不能为空").optional()),
-  FK_WEB_PORTAL_CALLBACK_URL: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    return val;
-  }, z.string().url("fkcodex 回调 URL 格式无效").optional()),
-  FK_WEB_PORTAL_CALLBACK_TOKEN: z.preprocess((val) => {
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "fkcodex 回调令牌不能为空").optional()),
   // ⚠️ 注意: 不要使用 z.coerce.boolean(),它会把字符串 "false" 转换为 true!
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串

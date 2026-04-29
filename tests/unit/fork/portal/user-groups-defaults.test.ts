@@ -3,7 +3,7 @@ import {
   buildDefaultUserGroupConfigs,
   DEFAULT_PORTAL_GROUP,
   DEFAULT_TEST_KEY_GROUP,
-} from "@/lib/user-groups/defaults";
+} from "@/fork/portal/user-groups/defaults";
 
 describe("buildDefaultUserGroupConfigs", () => {
   it("keeps built-in groups and adds env-specific groups", () => {

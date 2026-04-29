@@ -1,11 +1,5 @@
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
-import {
-  listPortalPlans,
-  listPortalSubscriptions,
-  listPortalUserLinks,
-  provisionPortalSubscription,
-} from "@/actions/portal";
 import { SectionStatic } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,9 +13,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  listPortalPlans,
+  listPortalSubscriptions,
+  listPortalUserLinks,
+  provisionPortalSubscription,
+} from "@/fork/portal/actions";
+import { getPortalConfig } from "@/fork/portal/config";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config/env.schema";
 import { PortalPlanManager } from "./_components/portal-plan-manager";
 
 export const dynamic = "force-dynamic";
@@ -207,7 +207,7 @@ export default async function PortalDashboardPage({
   const plans = plansResult.ok ? plansResult.data.plans : [];
   const subscriptions = subscriptionsResult.ok ? subscriptionsResult.data.subscriptions : [];
   const users = usersResult.ok ? usersResult.data.users : [];
-  const defaultProviderGroup = getEnvConfig().PORTAL_PROVIDER_GROUP;
+  const defaultProviderGroup = getPortalConfig().PORTAL_PROVIDER_GROUP;
 
   return (
     <div className="space-y-6">

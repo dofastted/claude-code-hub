@@ -3,7 +3,7 @@ import type {
   PortalSubscription,
   PortalUserLink,
   ProvisionPortalSubscriptionResult,
-} from "@/types/portal";
+} from "@/fork/portal/types/portal";
 
 export function serializePortalPlan(plan: PortalPlan) {
   return {

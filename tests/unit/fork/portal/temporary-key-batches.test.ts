@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTemporaryKeyBatch, deleteTemporaryKeyBatch } from "@/lib/keys/temporary-key-batches";
+import {
+  createTemporaryKeyBatch,
+  deleteTemporaryKeyBatch,
+} from "@/fork/portal/services/temporary-key-batches";
 import { ensureProviderGroupsExist } from "@/repository/provider-groups";
 import {
   ensureDefaultUserGroupConfigs,
   findUserGroupConfigByName,
-} from "@/repository/user-group-configs";
+} from "@/fork/portal/repository/user-group-configs";
 import { findUserById } from "@/repository/user";
-import { findTemporaryKeyBatchWithKeys } from "@/repository/temporary-key-batches";
+import { findTemporaryKeyBatchWithKeys } from "@/fork/portal/repository/temporary-key-batches";
 
-vi.mock("@/lib/config/env.schema", () => ({
-  getEnvConfig: () => ({
+vi.mock("@/fork/portal/config", () => ({
+  getPortalConfig: () => ({
     PORTAL_PROVIDER_GROUP: "portal-custom",
     PORTAL_TEST_KEY_GROUP: "temp-custom",
   }),
@@ -19,7 +22,7 @@ vi.mock("@/repository/provider-groups", () => ({
   ensureProviderGroupsExist: vi.fn(async () => undefined),
 }));
 
-vi.mock("@/repository/user-group-configs", () => ({
+vi.mock("@/fork/portal/repository/user-group-configs", () => ({
   ensureDefaultUserGroupConfigs: vi.fn(async () => undefined),
   findUserGroupConfigByName: vi.fn(async (groupName: string) => ({
     id: 1,
@@ -43,7 +46,7 @@ vi.mock("@/repository/key", () => ({
   findKeyList: vi.fn(async () => []),
 }));
 
-vi.mock("@/repository/temporary-key-batches", () => ({
+vi.mock("@/fork/portal/repository/temporary-key-batches", () => ({
   createTemporaryKeyBatchWithKeys: vi.fn(async () => {
     throw new Error("createTemporaryKeyBatchWithKeys should not be called");
   }),
@@ -51,7 +54,7 @@ vi.mock("@/repository/temporary-key-batches", () => ({
   markTemporaryKeyBatchDeleted: vi.fn(async () => undefined),
 }));
 
-vi.mock("@/lib/user-groups/sync", () => ({
+vi.mock("@/fork/portal/user-groups/sync", () => ({
   syncUserProviderGroupFromKeysForSystem: vi.fn(async () => undefined),
 }));
 

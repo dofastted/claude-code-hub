@@ -1,17 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logger } from "@/lib/logger";
-import {
-  serializePortalPlan,
-  serializePortalProvisionResult,
-  serializePortalSubscription,
-  serializePortalUserLink,
-} from "@/lib/portal/serialization";
-import {
-  PortalSubscriptionError,
-  provisionPortalSubscription as provisionPortalSubscriptionService,
-} from "@/lib/portal/subscriptions";
+import type { ActionResult } from "@/actions/types";
 import {
   deletePortalPlan as deletePortalPlanRepository,
   findPortalSubscriptionById,
@@ -21,9 +11,22 @@ import {
   setPortalPlanEnabled as setPortalPlanEnabledRepository,
   setPortalSubscriptionStatus,
   upsertPortalPlan as upsertPortalPlanRepository,
-} from "@/repository/portal";
-import type { ProvisionPortalSubscriptionInput, UpsertPortalPlanInput } from "@/types/portal";
-import type { ActionResult } from "./types";
+} from "@/fork/portal/repository/portal";
+import {
+  serializePortalPlan,
+  serializePortalProvisionResult,
+  serializePortalSubscription,
+  serializePortalUserLink,
+} from "@/fork/portal/serialization";
+import {
+  PortalSubscriptionError,
+  provisionPortalSubscription as provisionPortalSubscriptionService,
+} from "@/fork/portal/subscriptions";
+import type {
+  ProvisionPortalSubscriptionInput,
+  UpsertPortalPlanInput,
+} from "@/fork/portal/types/portal";
+import { logger } from "@/lib/logger";
 
 export async function listPortalPlans(input?: {
   includeDisabled?: boolean;

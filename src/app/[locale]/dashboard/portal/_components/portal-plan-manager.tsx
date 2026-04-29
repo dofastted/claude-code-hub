@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { deletePortalPlan, setPortalPlanEnabled, upsertPortalPlan } from "@/actions/portal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +37,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import type { UpsertPortalPlanInput } from "@/types/portal";
+import { deletePortalPlan, setPortalPlanEnabled, upsertPortalPlan } from "@/fork/portal/actions";
+import type { UpsertPortalPlanInput } from "@/fork/portal/types/portal";
 
 export interface PortalPlanDisplay {
   id: number;

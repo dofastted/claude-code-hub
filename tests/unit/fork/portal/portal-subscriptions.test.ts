@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Key } from "@/types/key";
-import type { PortalPlan, PortalSubscription, PortalUserLink } from "@/types/portal";
+import type { PortalPlan, PortalSubscription, PortalUserLink } from "@/fork/portal/types/portal";
 import type { User } from "@/types/user";
 import {
   type PortalSubscriptionError,
   provisionPortalSubscription,
   type PortalProvisionDependencies,
-} from "@/lib/portal/subscriptions";
+} from "@/fork/portal/subscriptions";
 
 const now = new Date("2026-04-28T00:00:00.000Z");
 

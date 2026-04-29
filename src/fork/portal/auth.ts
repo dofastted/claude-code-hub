@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getEnvConfig } from "@/lib/config/env.schema";
+import { getPortalConfig } from "@/fork/portal/config";
 import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 
 export interface PortalAuthContext {
@@ -29,7 +29,7 @@ function readBearerToken(request: Request): string | null {
 }
 
 function expectedTokenForScope(scope: PortalAccessScope): string | undefined {
-  const env = getEnvConfig();
+  const env = getPortalConfig();
   switch (scope) {
     case "management":
       return env.PORTAL_MANAGEMENT_TOKEN;
@@ -46,7 +46,7 @@ export function validatePortalRequest(
   request: Request,
   options: PortalAuthOptions = {}
 ): PortalAuthContext | null {
-  const env = getEnvConfig();
+  const env = getPortalConfig();
   const scopes: PortalAccessScope[] = options.scopes?.length ? options.scopes : ["management"];
 
   const token = readBearerToken(request);

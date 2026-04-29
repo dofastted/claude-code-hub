@@ -4,7 +4,7 @@ const ORIGINAL_ENV = { ...process.env };
 
 async function importAuth() {
   vi.resetModules();
-  return import("@/lib/portal/auth");
+  return import("@/fork/portal/auth");
 }
 
 describe("portal auth", () => {

@@ -2,8 +2,8 @@ import "server-only";
 
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { portalPlans, portalSubscriptions, portalUserLinks } from "@/drizzle/schema";
-import { getEnvConfig } from "@/lib/config/env.schema";
+import { getPortalConfig } from "@/fork/portal/config";
+import { portalPlans, portalSubscriptions, portalUserLinks } from "@/fork/portal/schema";
 import type {
   CreatePortalSubscriptionInput,
   PortalPlan,
@@ -12,7 +12,7 @@ import type {
   PortalUserLink,
   UpsertPortalPlanInput,
   UpsertPortalUserLinkInput,
-} from "@/types/portal";
+} from "@/fork/portal/types/portal";
 
 type PortalPlanRow = typeof portalPlans.$inferSelect;
 type PortalUserLinkRow = typeof portalUserLinks.$inferSelect;
@@ -35,7 +35,7 @@ function cleanString(value: string, fallback: string): string {
 }
 
 export function resolvePortalPlanProviderGroup(providerGroup?: string): string {
-  const defaultProviderGroup = getEnvConfig().PORTAL_PROVIDER_GROUP;
+  const defaultProviderGroup = getPortalConfig().PORTAL_PROVIDER_GROUP;
   return cleanString(providerGroup ?? defaultProviderGroup, defaultProviderGroup);
 }
 

@@ -2,7 +2,7 @@
 
 本文是 CCH 与 fk-web-glm 之间的门户套餐和订阅 API 契约。相同内容需要保留在两个仓库：
 
-- CCH：`/mnt/x/project/claude-code-hub/docs/cch-portal-api-contract.md`
+- CCH：`/mnt/x/project/claude-code-hub/docs/fork/cch-portal-api-contract.md`
 - fk-web-glm：`/mnt/x/fk-web-glm/docs/cch-portal-api-contract.md`
 
 ## 服务边界

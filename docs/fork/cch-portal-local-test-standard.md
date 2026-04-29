@@ -4,7 +4,7 @@
 
 相同内容需要保留在两个仓库：
 
-- CCH：`/mnt/x/project/claude-code-hub/docs/cch-portal-local-test-standard.md`
+- CCH：`/mnt/x/project/claude-code-hub/docs/fork/cch-portal-local-test-standard.md`
 - fk-web-glm：`/mnt/x/fk-web-glm/docs/cch-portal-local-test-standard.md`
 
 ## 适用范围
