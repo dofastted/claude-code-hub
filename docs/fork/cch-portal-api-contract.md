@@ -22,6 +22,7 @@ CCH 侧：
 - `FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
 - `FK_WEB_PORTAL_CALLBACK_URL`
 - `FK_WEB_PORTAL_CALLBACK_TOKEN`
+- `FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET`
 
 fk-web-glm 侧：
 
@@ -32,8 +33,10 @@ fk-web-glm 侧：
 - `FK_CCH_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
 - `FK_PORTAL_CCH_BRIDGE_TOKEN`
 - `FK_CCH_PORTAL_CALLBACK_TOKEN`
+- `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET`
+- `FK_CCH_PORTAL_PLANS_CACHE_TTL_MS` 可选，默认 30000，最大 300000。只影响公开 plans 代理的进程内缓存。
 
-token 只写 `.env.local`，不要提交。
+token 和 signing secret 只写 `.env.local`，不要提交。`FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET` 与 `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET` 必须使用同一个值，只是两边环境变量名不同。
 
 `PORTAL_PROVIDER_GROUP` 和 `PORTAL_TEST_KEY_GROUP` 可以改成部署自己的分组名。CCH 会为这些分组补建 provider group 和临时 key 所需的 user group config。
 
@@ -52,7 +55,9 @@ fk-web-glm 代理 API：
 - `GET /api/cch/portal/plans` 不需要 `FK_PORTAL_CCH_BRIDGE_TOKEN`
 - `GET /api/cch/portal/subscriptions` 需要 `FK_PORTAL_CCH_BRIDGE_TOKEN`
 - `POST /api/cch/portal/subscriptions/provision` 需要 `FK_PORTAL_CCH_BRIDGE_TOKEN`
-- `POST /api/cch/portal/callback` 需要 `FK_CCH_PORTAL_CALLBACK_TOKEN`
+- `POST /api/cch/portal/callback` 需要 `FK_CCH_PORTAL_CALLBACK_TOKEN`、`X-FK-Portal-Timestamp` 和 `X-FK-Portal-Signature`
+
+`X-FK-Portal-Signature` 格式为 `sha256=<hex>`。签名内容是 `${timestamp}.${rawBody}`，CCH 用 `FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET` 生成，fk-web-glm 用 `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET` 验证。两边 secret 必须同值。时间戳单位为毫秒，允许 5 分钟窗口。窗口内重复签名返回 HTTP 409。
 
 ## CCH 原始 API
 
@@ -215,7 +220,7 @@ fk-web-glm 代理 API：
 }
 ```
 
-注意：CCH 原始响应会包含 `defaultKey.key`。fk-web-glm 日志和测试输出必须脱敏。
+注意：CCH 原始响应会包含 `defaultKey.key`。fk-web-glm 代理响应、页面、日志和测试输出必须脱敏。
 
 禁用套餐示例：
 
@@ -259,21 +264,13 @@ fk-web-glm 代理 API：
 ```json
 {
   "ok": true,
-  "endpoint": {
-    "baseUrl": "http://127.0.0.1:23000",
-    "origin": "http://127.0.0.1:23000",
-    "protocol": "http",
-    "hostname": "127.0.0.1",
-    "port": "23000",
-    "path": "/api/portal/plans",
-    "url": "http://127.0.0.1:23000/api/portal/plans"
-  },
-  "plans": [],
-  "auth": {
-    "usesPlanReadToken": true
-  }
+  "plans": []
 }
 ```
+
+该公开响应只返回页面展示所需套餐字段，不返回 `endpoint`、`auth`、内部 base URL、端口、token 或 key。
+
+fk-web-glm 会对该公开 plans 代理做短期进程内缓存，默认 30 秒。缓存只覆盖套餐读取，不覆盖订阅、开通、quota 或 callback。
 
 ### `GET /api/cch/portal/subscriptions`
 
@@ -284,27 +281,58 @@ fk-web-glm 代理 API：
 ```json
 {
   "ok": true,
-  "endpoint": {
-    "url": "http://127.0.0.1:23000/api/portal/subscriptions?limit=100"
-  },
   "subscriptions": []
 }
 ```
 
-### `POST /api/cch/portal/subscriptions/provision`
+### `POST /api/cch/portal/subscriptions/overview`
 
-需要 `Authorization: Bearer $FK_PORTAL_CCH_BRIDGE_TOKEN`。
+给可信服务端调用使用。需要 `Authorization: Bearer $FK_PORTAL_CCH_BRIDGE_TOKEN`。浏览器页面不能直接调用，因为当前 auth 仍是前端 mock，服务端不能可信地判断当前用户身份。
 
-请求体与 CCH 原始 API 一致。
+请求体：
+
+```json
+{
+  "portalUserId": "mock-user-001",
+  "email": "mock-user-001@example.test"
+}
+```
 
 成功响应：
 
 ```json
 {
   "ok": true,
-  "endpoint": {
-    "url": "http://127.0.0.1:23000/api/portal/subscriptions/provision"
-  },
+  "overview": {
+    "balanceDisplay": "N/A",
+    "quotaAvailableDisplay": "N/A",
+    "quotaTotalDisplay": "$800.00",
+    "quotaPairDisplay": "N/A / $800.00",
+    "currentSubscription": {
+      "id": "10",
+      "planId": "pro",
+      "planName": "Pro",
+      "status": "active",
+      "rateMultiplierDisplay": "30 RPM"
+    },
+    "plans": []
+  }
+}
+```
+
+该响应不得返回 raw subscription、token、provider key、default key 明文。真实服务端 auth 接入后，再由服务端会话推导当前用户身份，不从浏览器请求体信任任意 email。
+
+### `POST /api/cch/portal/subscriptions/provision`
+
+需要 `Authorization: Bearer $FK_PORTAL_CCH_BRIDGE_TOKEN`。
+
+请求体与 CCH 原始 API 一致。fk-web-glm 会拒绝多余字段，并限制 `sourceOrderId`、`portalUserId`、`planId` 只能使用字母、数字、`.`、`_`、`:`、`-`。`sourceOrderId` 和 `portalUserId` 最长 200 字符，`planId` 最长 100 字符，`email` 最长 320 字符且必须是邮箱格式，`assignedSource` 最长 100 字符，`notes` 最长 2000 字符。
+
+成功响应：
+
+```json
+{
+  "ok": true,
   "result": {
     "idempotent": true
   },
@@ -320,7 +348,10 @@ fk-web-glm 代理 API：
 
 ### `POST /api/cch/portal/callback`
 
-CCH 在开通或撤销订阅后调用。需要 `Authorization: Bearer $FK_CCH_PORTAL_CALLBACK_TOKEN`。
+CCH 在开通或撤销订阅后调用。需要 `Authorization: Bearer $FK_CCH_PORTAL_CALLBACK_TOKEN`，并同时提供签名头：
+
+- `X-FK-Portal-Timestamp: <unix_ms>`
+- `X-FK-Portal-Signature: sha256=<hex_hmac>`
 
 请求体：
 
@@ -330,7 +361,9 @@ CCH 在开通或撤销订阅后调用。需要 `Authorization: Bearer $FK_CCH_PO
   "data": {
     "result": {
       "subscription": {
-        "sourceOrderId": "mock-order-001"
+        "sourceOrderId": "mock-order-001",
+        "portalUserId": "mock-user-001",
+        "planId": "pro"
       }
     }
   }
@@ -341,6 +374,10 @@ CCH 在开通或撤销订阅后调用。需要 `Authorization: Bearer $FK_CCH_PO
 
 - `portal.subscription.provisioned`
 - `portal.subscription.revoked`
+
+`portal.subscription.revoked` 必须包含 `data.subscription.id` 和 `data.subscription.status=revoked`。
+
+开通事件必须把 CCH 开通结果放在 `data.result`，并让订阅字段出现在 `data.result.subscription`。如果 CCH 只发送 `data.subscription`，fk-web-glm 会返回 `CCH_PORTAL_CALLBACK_DATA_REQUIRED`。
 
 成功响应：
 
@@ -372,11 +409,16 @@ fk-web-glm 代理 API：
   "ok": false,
   "error": {
     "code": "CCH_PORTAL_BRIDGE_UNAUTHORIZED",
-    "message": "Invalid portal bridge token.",
-    "details": {}
+    "message": "Invalid portal bridge token."
   }
 }
 ```
+
+错误响应不得包含 token、provider key、本地 portal key、内部 endpoint、内部 base URL 或请求体敏感字段。
+
+## CCH quota bridge
+
+`POST /api/cch/quota` 是 fk-web-glm 内部接口，需要 `Authorization: Bearer $FK_PORTAL_CCH_BRIDGE_TOKEN`。它不再接受浏览器请求体里的 `{ "apiKey": "..." }`。当前没有服务端可信身份时，只能使用服务端环境变量 `FK_CCH_API_KEY`；未配置时返回 503。
 
 ## 本地固定数据
 
@@ -391,9 +433,15 @@ fk-web-glm 代理 API：
 
 - CCH `GET /api/portal/plans` 返回 `pro` 和 `trial`，不返回 `disabled-local`。
 - fk-web-glm `GET /api/cch/portal/plans` 返回 `ok=true` 且包含 `pro`。
+- fk-web-glm `GET /api/cch/portal/plans` 不返回 `endpoint`、`auth` 或内部 base URL。
 - fk-web-glm `GET /api/cch/portal/subscriptions` 在无 bridge token 时返回 401。
 - fk-web-glm `POST /api/cch/portal/subscriptions/provision` 在无 bridge token 时返回 401。
+- fk-web-glm `POST /api/cch/quota` 带公开 `{ apiKey }` 且无内部 token 时返回 401。
+- fk-web-glm callback 正确签名返回 200，篡改签名返回 401。
 - 固定 `sourceOrderId=mock-order-smoke-idempotent` 第二次开通返回 `idempotent=true`。
+- 同一 `sourceOrderId` 搭配不同 `portalUserId`、`email` 或 `planId` 返回 `409 IDEMPOTENCY_CONFLICT`。
 - 时间戳订单开通后，订阅、CCH 用户、默认 key 都在 `portal` 分组。
 - `disabled-local` 开通失败，错误码为 `PLAN_NOT_AVAILABLE`。
 - 错误 CCH token 请求原始 API 返回 401。
+- `/pricing` 展示 CCH plans，包含 `pro` 和 `trial`，不包含 `disabled-local`。
+- `/subscriptions` 展示公开 CCH plans；真实服务端 auth 接入前，不从浏览器请求体按 email 查询订阅。

@@ -27,10 +27,11 @@ CCH：
 - 本地 DB 存在 `mock-user-001` 和 `mock-order-001` 示例订阅。
 - 本地 provider 已用 `npm run provider:local-cch-test` 配到 `portal` 分组。
 - `FK_WEB_PORTAL_CALLBACK_URL` 指向当前 web 服务端口。
+- `FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET` 与 web 侧 `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET` 同值。
 
 fk-web-glm：
 
-- `.env.local` 存在，且包含 `FK_CCH_API_BASE_URL`、`FK_WEB_BASE_URL`、三类 `FK_CCH_PORTAL_*_TOKEN`、`FK_PORTAL_CCH_BRIDGE_TOKEN`、`FK_CCH_PORTAL_CALLBACK_TOKEN`。
+- `.env.local` 存在，且包含 `FK_CCH_API_BASE_URL`、`FK_WEB_BASE_URL`、三类 `FK_CCH_PORTAL_*_TOKEN`、`FK_PORTAL_CCH_BRIDGE_TOKEN`、`FK_CCH_PORTAL_CALLBACK_TOKEN`、`FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET`。
 - `FK_WEB_BASE_URL` 与实际启动端口一致。
 - 当前运行态包含 `/api/cch/portal/*` 路由。
 
@@ -66,15 +67,21 @@ FK_WEB_BASE_URL=http://127.0.0.1:3310 npm run cch:smoke
 | F-02 | 禁用套餐隐藏 | 套餐列表不包含 `disabled-local` |
 | F-03 | web 套餐代理 | `GET /api/cch/portal/plans` 返回 `ok=true`，包含 `pro` |
 | F-04 | web 订阅代理 | 带 bridge token 请求 `GET /api/cch/portal/subscriptions` 返回 `ok=true` |
-| F-05 | bridge token | 不带 bridge token 请求订阅列表返回 401 |
-| F-06 | 开通鉴权 | 不带 bridge token 请求开通返回 401 |
-| F-07 | CCH token | 错误 CCH purpose token 请求原始 API 返回 401 |
-| F-08 | 固定订单 | `mock-order-smoke-idempotent` 第二次开通返回 `idempotent=true` |
-| F-09 | 新订单 | `mock-order-smoke-<timestamp>` 返回 `idempotent=false` |
-| F-10 | 写后可读 | 新订单开通后，订阅列表能查到同一个 `sourceOrderId` |
-| F-11 | 分组 | 新订阅、CCH 用户、默认 key 都在 `portal` 分组 |
-| F-12 | 禁用套餐 | `disabled-local` 开通失败，错误码保持 `PLAN_NOT_AVAILABLE` |
-| F-13 | 敏感信息 | 输出不展示 token、provider key、本地 portal key 原文 |
+| F-05 | web 套餐脱敏 | `GET /api/cch/portal/plans` 不返回 `endpoint`、`auth` 或内部 base URL |
+| F-06 | bridge token | 不带 bridge token 请求订阅列表返回 401 |
+| F-07 | 开通鉴权 | 不带 bridge token 请求开通返回 401 |
+| F-08 | CCH token | 错误 CCH purpose token 请求原始 API 返回 401 |
+| F-09 | quota guard | `POST /api/cch/quota` 带公开 `{ apiKey }` 且无内部 token 返回 401 |
+| F-10 | callback 签名 | 正确签名返回 200，篡改签名返回 401 |
+| F-11 | 固定订单 | `mock-order-smoke-idempotent` 第二次开通返回 `idempotent=true` |
+| F-12 | 固定订单冲突 | 同一 `sourceOrderId` 搭配不同 `portalUserId`、`email` 或 `planId` 返回 `409 IDEMPOTENCY_CONFLICT` |
+| F-13 | 新订单 | `mock-order-smoke-<timestamp>` 返回 `idempotent=false` |
+| F-14 | 写后可读 | 新订单开通后，订阅列表能查到同一个 `sourceOrderId` |
+| F-15 | 分组 | 新订阅、CCH 用户、默认 key 都在 `portal` 分组 |
+| F-16 | 禁用套餐 | `disabled-local` 开通失败，错误码保持 `PLAN_NOT_AVAILABLE` |
+| F-17 | 敏感信息 | 输出不展示 token、provider key、本地 portal key 原文 |
+| F-18 | 定价页来源 | `/pricing` 展示 CCH plans，包含 `pro` 和 `trial`，不包含 `disabled-local` |
+| F-19 | 订阅页来源 | `/subscriptions` 展示公开 CCH plans；真实服务端 auth 接入前，不从浏览器请求体按 email 查询订阅 |
 
 ## 同步延迟口径
 
@@ -114,6 +121,8 @@ FK_WEB_BASE_URL=http://127.0.0.1:3310 npm run cch:smoke
 | `total` | `<= 10000ms` | 全脚本耗时 |
 
 Cold run 不使用这些数值判定异常。Next.js 首次编译 API 路由时，单个请求可能明显超过基准。先跑一次 `npm run cch:smoke` 预热，再跑第二次作为基准结果。
+
+fk-web-glm 的公开 plans 代理有默认 30 秒进程内缓存，`proxyPlans` 的 warm run 应命中该缓存。可用 `FK_CCH_PORTAL_PLANS_CACHE_TTL_MS=0` 临时关闭缓存来排查真实 CCH 读取耗时。
 
 ## 当前本机 warm run 样本
 

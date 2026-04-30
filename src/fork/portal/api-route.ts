@@ -37,6 +37,8 @@ type PortalContext = NonNullable<ReturnType<typeof validatePortalRequest>>;
 
 const nullableNumberSchema = z.number().finite().nullable().optional();
 const dateStringSchema = z.string().datetime().nullable().optional();
+const portalSafeIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/);
+const portalPlanIdSchema = z.string().min(1).max(100).regex(/^[A-Za-z0-9._:-]+$/);
 
 const portalUserCreateSchema = z
   .object({
@@ -97,13 +99,13 @@ const temporaryBatchCreateSchema = z
   })
   .strict();
 
-const portalSubscriptionProvisionSchema = z
+export const portalSubscriptionProvisionSchema = z
   .object({
-    sourceOrderId: z.string().min(1),
-    portalUserId: z.string().min(1),
-    email: z.string().email(),
-    planId: z.string().min(1),
-    assignedSource: z.string().max(200).optional(),
+    sourceOrderId: portalSafeIdSchema,
+    portalUserId: portalSafeIdSchema,
+    email: z.string().email().max(320),
+    planId: portalPlanIdSchema,
+    assignedSource: z.string().max(100).optional(),
     notes: z.string().max(2000).nullable().optional(),
   })
   .strict();
@@ -456,9 +458,9 @@ async function listPortalPlansForFkcodex(): Promise<Response> {
   return json({ ok: true, data: { plans: plans.map(serializePortalPlan) } });
 }
 
-function readLimit(request: Request): number {
+export function readLimit(request: Request): number {
   const value = Number(new URL(request.url).searchParams.get("limit") ?? 100);
-  return Number.isInteger(value) && value > 0 ? value : 100;
+  return Number.isInteger(value) && value > 0 ? Math.min(value, 500) : 100;
 }
 
 async function listPortalSubscriptionsForFkcodex(request: Request): Promise<Response> {
@@ -482,7 +484,9 @@ async function provisionPortalSubscriptionForFkcodex(request: Request): Promise<
   const input = portalSubscriptionProvisionSchema.parse(await readJson(request));
   const result = await provisionPortalSubscription(input);
   const serialized = serializePortalProvisionResult(result);
-  const callback = await notifyFkWebPortalEvent("portal.subscription.provisioned", serialized);
+  const callback = await notifyFkWebPortalEvent("portal.subscription.provisioned", {
+    result: serialized,
+  });
 
   return json(
     {
@@ -636,7 +640,7 @@ async function handlePortalRequest(request: Request, context: RouteContext): Pro
     if (error instanceof z.ZodError) {
       return errorJson(error.issues[0]?.message ?? "请求参数不合法", 400, "VALIDATION_ERROR");
     }
-    return errorJson(error instanceof Error ? error.message : "请求失败", 500, "INTERNAL_ERROR");
+    return errorJson("请求失败", 500, "INTERNAL_ERROR");
   }
 }
 

@@ -22,6 +22,7 @@ CCH `.env.local` 必须包含：
 - `FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
 - `FK_WEB_PORTAL_CALLBACK_URL=http://127.0.0.1:3301/api/cch/portal/callback`
 - `FK_WEB_PORTAL_CALLBACK_TOKEN`
+- `FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET`
 - `DISABLE_CLOUD_PRICE_SYNC=true`
 
 fk-web-glm `.env.local` 必须包含：
@@ -33,8 +34,9 @@ fk-web-glm `.env.local` 必须包含：
 - `FK_CCH_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
 - `FK_PORTAL_CCH_BRIDGE_TOKEN`
 - `FK_CCH_PORTAL_CALLBACK_TOKEN`
+- `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET`
 
-`.env.local` 不要提交。
+`.env.local` 不要提交。脚本输出也不展示 token 或 key 原文。CCH 的 `FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET` 与 fk-web-glm 的 `FK_CCH_PORTAL_CALLBACK_SIGNING_SECRET` 必须使用同一个值。
 
 `PORTAL_PROVIDER_GROUP` 和 `PORTAL_TEST_KEY_GROUP` 可以改成本地自定义分组名。CCH 会补建这些分组对应的 provider group 和 user group config。
 
@@ -53,6 +55,13 @@ npm run portal:mock-data -- --dry-run
 ```
 
 脚本只允许本地 DSN 主机。非本地 DSN 会直接退出。
+
+写入后应存在：
+
+- `portal` 用户分组。
+- `test-key` 用户分组。
+- `pro`、`trial`、`disabled-local` 三个套餐。
+- `mock-user-001` 和 `mock-order-001` 示例订阅。
 
 ## 3. 配置真实上游测试 provider
 
@@ -88,6 +97,13 @@ npx next dev --webpack --hostname 127.0.0.1 --port 23000
 npm run dev -- --hostname 127.0.0.1 --port 3301
 ```
 
+如果要使用仓库已有生产运行脚本：
+
+```bash
+./scripts/fkcodex-boot.sh
+./scripts/fkcodex-status.sh
+```
+
 ## 5. API 测试
 
 在 fk-web-glm 仓库执行：
@@ -96,7 +112,7 @@ npm run dev -- --hostname 127.0.0.1 --port 3301
 npm run cch:smoke
 ```
 
-本地测试标准和同步延迟基准见 `docs/fork/cch-portal-local-test-standard.md`。需要让延迟超标也返回非 0 时执行：
+本地测试标准和同步延迟基准见 CCH 仓库的 `docs/fork/cch-portal-local-test-standard.md` 和 fk-web-glm 仓库的 `docs/cch-portal-local-test-standard.md`。需要让延迟超标也返回非 0 时执行：
 
 ```bash
 CCH_SMOKE_ENFORCE_LATENCY=true npm run cch:smoke
@@ -112,10 +128,12 @@ CCH_SMOKE_ENFORCE_LATENCY=true npm run cch:smoke
 - 时间戳订单新增开通
 - 禁用套餐开通失败
 - bridge token 缺失返回 401
+- 公开 quota 请求体传 `apiKey` 返回 401，且不展示 key 原文
+- 签名 callback 返回 200，篡改签名返回 401
 - CCH 原始 API 错误 token 返回 401
 - 新开订阅、CCH 用户、默认 key 都在 `portal` 分组
 
-脚本会输出 `latency summary`，其中 `readAfterWrite` 是新订单开通响应返回后，到订阅列表读到该订单的同步延迟。
+脚本会输出 `latency summary`，其中 `readAfterWrite` 是新订单开通响应返回后，到订阅列表读到该订单的同步延迟。脚本只打印 `planId`、`sourceOrderId`、`portalUserId`、`cchUserId`、`defaultKeyId`、回调状态和耗时，不打印 key 原文。
 
 ## 6. 真实上游验证
 
@@ -162,15 +180,13 @@ curl http://127.0.0.1:23000/v1/responses \
   }'
 ```
 
-日志或测试输出不得展示真实 provider key 或本地 portal key。
+日志或测试输出不得展示真实 provider key 或本地 portal key。模型列表以当前 `/v1/models` 返回为准，不要把示例模型当成固定清单。
 
-## 7. web 侧需要重点检查
+## 7. web 侧 agent 检查顺序
 
-web 侧 agent 可以按下面顺序测：
-
-1. 读 `docs/fork/cch-portal-api-contract.md`。
-2. 读 `docs/fork/cch-portal-local-usage-guide.md`。
-3. 读 `docs/fork/cch-portal-local-test-standard.md`。
+1. 读 API 合同。CCH 路径是 `docs/fork/cch-portal-api-contract.md`，fk-web-glm 路径是 `docs/cch-portal-api-contract.md`。
+2. 读本地使用指南。CCH 路径是 `docs/fork/cch-portal-local-usage-guide.md`，fk-web-glm 路径是 `docs/cch-portal-local-usage-guide.md`。
+3. 读本地测试标准。CCH 路径是 `docs/fork/cch-portal-local-test-standard.md`，fk-web-glm 路径是 `docs/cch-portal-local-test-standard.md`。
 4. 读 `docs/cch-web-agent-handoff.md`。
 5. 启动 fk-web-glm 后执行 `npm run cch:smoke`。
 6. 第二次执行 `npm run cch:smoke`，用 `latency summary` 作为 warm run 基准。
@@ -178,12 +194,17 @@ web 侧 agent 可以按下面顺序测：
 8. 调用 `POST /api/cch/portal/subscriptions/provision`，保存返回的 `sourceOrderId`、`portalUserId`、`cchUserId`、`defaultKeyId`。
 9. 再读 `GET /api/cch/portal/subscriptions`，确认刚开通的订单可见。
 10. 重复请求同一个 `sourceOrderId`，确认 `idempotent=true`。
-11. 请求 `disabled-local`，确认返回错误并且页面不当作成功。
-12. 检查回调结果：`callback.ok=true` 表示 CCH 已通知 fk-web-glm；`callback.skipped=true` 表示 CCH 未配置回调 URL 或 token。
+11. 同一个 `sourceOrderId` 搭配不同 `portalUserId`、`email` 或 `planId` 时，确认返回 `409 IDEMPOTENCY_CONFLICT`。
+12. 请求 `disabled-local`，确认返回错误并且页面不当作成功。
+13. 检查回调结果：`callback.ok=true` 表示 CCH 已带签名通知 fk-web-glm；`callback.skipped=true` 表示 CCH 未配置回调 URL 或 token。若缺少签名 secret，CCH 会返回 `callback.ok=false` 且不发请求。
+14. 检查 callback 请求体：开通事件必须是 `data.result.subscription`，不能是 `data.subscription`。
+15. 打开 `/pricing`，确认页面套餐来自 CCH plans，不出现本地假套餐或 `disabled-local`。
+16. 用 `mock-user-001@example.test` 登录 `/subscriptions`，确认页面展示 CCH plans，不展示 raw key；真实服务端 auth 接入前不要从浏览器请求体按 email 查询订阅。
 
 ## 8. 常见问题
 
-- `Unauthorized`：先查 token 是否放在对应仓库的 `.env.local`，再重启 dev 服务。
+- `Unauthorized`：先查 token 和 callback signing secret 是否放在对应仓库的 `.env.local`，再重启 dev 服务。
 - `PLAN_NOT_AVAILABLE`：`planId` 不存在、被禁用或已删除。
 - `callback result was not returned`：通常是 fk-web-glm dev 服务还没重启到最新代码，或 web 代理还没有透出 CCH 的 callback 字段。
+- `CCH_PORTAL_CALLBACK_DATA_REQUIRED`：检查 CCH 发送的开通回调是否为 `data.result.subscription`，不要发送成 `data.subscription`。
 - 上游模型调用失败：先直连 `https://cch.fkcodex.com/v1/models`，再检查本地 provider 是否在 `portal` 分组。

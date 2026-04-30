@@ -1,1 +1,3 @@
-export { DELETE, GET, PATCH, POST, runtime } from "@/fork/portal/api-route";
+export { DELETE, GET, PATCH, POST } from "@/fork/portal/api-route";
+
+export const runtime = "nodejs";

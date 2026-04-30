@@ -9,6 +9,7 @@ export interface PortalRuntimeConfig {
   FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN?: string;
   FK_WEB_PORTAL_CALLBACK_URL?: string;
   FK_WEB_PORTAL_CALLBACK_TOKEN?: string;
+  FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET?: string;
 }
 
 function optionalToken(name: string): string | undefined {
@@ -34,5 +35,8 @@ export function getPortalConfig(): PortalRuntimeConfig {
     ),
     FK_WEB_PORTAL_CALLBACK_URL: optionalText("FK_WEB_PORTAL_CALLBACK_URL"),
     FK_WEB_PORTAL_CALLBACK_TOKEN: optionalToken("FK_WEB_PORTAL_CALLBACK_TOKEN"),
+    FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET: optionalToken(
+      "FK_WEB_PORTAL_CALLBACK_SIGNING_SECRET"
+    ),
   };
 }
