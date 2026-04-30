@@ -54,6 +54,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,
             enableHttp2: settings.enableHttp2,
+            enableOpenaiResponsesWebsocket: settings.enableOpenaiResponsesWebsocket,
             enableHighConcurrencyMode: settings.enableHighConcurrencyMode,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
@@ -62,6 +63,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             enableResponseInputRectifier: settings.enableResponseInputRectifier,
             allowNonConversationEndpointProviderFallback:
               settings.allowNonConversationEndpointProviderFallback,
+            fakeStreamingWhitelist: settings.fakeStreamingWhitelist,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

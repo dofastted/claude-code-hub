@@ -5,6 +5,7 @@ import {
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
+import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import {
@@ -428,6 +429,30 @@ export const KeyFormSchema = z.object({
   cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 
+// 共享：静态自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则。
+// 行为：
+// - 缺失 → 输出中省略字段（保留可选性，不修改既有行为）
+// - 显式 null → null（清空）
+// - {} → null（归一化为清空）
+// - 合法对象 → 通过
+// - 否则触发自定义 zod issue，错误码以 custom_headers_<code> 形式暴露给上层
+const PROVIDER_CUSTOM_HEADERS_SCHEMA = z
+  .any()
+  .transform((val, ctx) => {
+    if (val === undefined) return undefined;
+    if (val === null) return null;
+    const result = normalizeCustomHeadersRecord(val);
+    if (!result.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `custom_headers_${result.code}`,
+      });
+      return z.NEVER;
+    }
+    return result.value;
+  })
+  .optional();
+
 /**
  * 服务商创建数据验证schema
  */
@@ -578,6 +603,8 @@ export const CreateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional().default(false),
+    // 静态自定义请求头
+    custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
     // 超时配置（毫秒）
     // 注意：0 表示禁用超时（Infinity）
     first_byte_timeout_streaming_ms: z
@@ -810,6 +837,8 @@ export const UpdateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional(),
+    // 静态自定义请求头
+    custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
     // 超时配置（毫秒）
     // 注意：0 表示禁用超时（Infinity）
     first_byte_timeout_streaming_ms: z
@@ -960,6 +989,8 @@ export const UpdateSystemSettingsSchema = z.object({
   passThroughUpstreamErrorMessage: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
+  // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
+  enableOpenaiResponsesWebsocket: z.boolean().optional(),
   // 高并发模式（可选）
   enableHighConcurrencyMode: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
@@ -974,6 +1005,43 @@ export const UpdateSystemSettingsSchema = z.object({
   enableResponseInputRectifier: z.boolean().optional(),
   // 非对话端点跨供应商 fallback（可选）
   allowNonConversationEndpointProviderFallback: z.boolean().optional(),
+  // Fake 流式输出白名单（可选）。空数组表示显式禁用；缺省 → 使用默认四个图像生成模型。
+  fakeStreamingWhitelist: z
+    .array(
+      z.object({
+        model: z
+          .string()
+          .min(1, "model 不能为空")
+          .max(200, "model 不能超过 200 个字符")
+          .transform((value) => value.trim())
+          .refine((value) => value.length > 0, { message: "model 不能为空" }),
+        groupTags: z
+          .array(
+            z
+              .string()
+              .min(1)
+              .transform((value) => value.trim())
+              .refine((value) => value.length > 0, { message: "groupTag 不能为空" })
+          )
+          .default([])
+          .transform((tags) => Array.from(new Set(tags))),
+      })
+    )
+    .superRefine((entries, ctx) => {
+      const seen = new Set<string>();
+      for (let index = 0; index < entries.length; index += 1) {
+        const model = entries[index].model;
+        if (seen.has(model)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `fakeStreamingWhitelist 模型重复: ${model}`,
+            path: [index, "model"],
+          });
+        }
+        seen.add(model);
+      }
+    })
+    .optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
   // Claude metadata.user_id 注入（可选）
