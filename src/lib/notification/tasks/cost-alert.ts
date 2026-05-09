@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, providers } from "@/drizzle/schema";
+import { keys, providers, users } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { getTimeRangeForPeriod } from "@/lib/rate-limit/time-utils";
 import type { CostAlertData } from "@/lib/webhook";
@@ -63,7 +63,8 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
       .select({
         id: keys.id,
         key: keys.key,
-        userName: keys.name,
+        userId: users.id,
+        userName: users.name,
 
         // 限额配置
         limit5h: keys.limit5hUsd,
@@ -71,8 +72,11 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         limitMonth: keys.limitMonthlyUsd,
       })
       .from(keys)
+      .innerJoin(users, sql`${keys.userId} = ${users.id}`)
       .where(
-        sql`${keys.limit5hUsd} > 0 OR ${keys.limitWeeklyUsd} > 0 OR ${keys.limitMonthlyUsd} > 0`
+        sql`(${keys.limit5hUsd} > 0 OR ${keys.limitWeeklyUsd} > 0 OR ${keys.limitMonthlyUsd} > 0)
+          AND ${keys.deletedAt} IS NULL
+          AND ${users.deletedAt} IS NULL`
       );
 
     // 预计算时间范围（所有 key 共享相同的时间窗口）
@@ -97,7 +101,7 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
-              targetId: keyData.id,
+              targetId: keyData.userId,
               currentCost: cost5h,
               quotaLimit: limit5h,
               threshold,
@@ -120,7 +124,7 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
-              targetId: keyData.id,
+              targetId: keyData.userId,
               currentCost: costWeek,
               quotaLimit: limitWeek,
               threshold,
@@ -143,7 +147,7 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
-              targetId: keyData.id,
+              targetId: keyData.userId,
               currentCost: costMonth,
               quotaLimit: limitMonth,
               threshold,

@@ -149,10 +149,10 @@ function cleanResponseHeaders(headers: Headers): Headers {
   return cleaned;
 }
 
-function ensurePricingResolutionSpecialSetting(
+async function ensurePricingResolutionSpecialSetting(
   session: ProxySession,
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>>
-): void {
+): Promise<void> {
   if (!resolvedPricing) return;
 
   const existing = session
@@ -171,11 +171,26 @@ function ensurePricingResolutionSpecialSetting(
     type: "pricing_resolution",
     scope: "billing",
     hit: true,
-    modelName: session.getCurrentModel() ?? resolvedPricing.resolvedModelName,
+    modelName: await resolvePricingResolutionModelName(session, resolvedPricing),
     resolvedModelName: resolvedPricing.resolvedModelName,
     resolvedPricingProviderKey: resolvedPricing.resolvedPricingProviderKey,
     source: resolvedPricing.source,
   });
+}
+
+async function resolvePricingResolutionModelName(
+  session: ProxySession,
+  resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>>
+): Promise<string> {
+  if (!resolvedPricing) {
+    return session.getCurrentModel() ?? session.getOriginalModel() ?? "";
+  }
+
+  const billingModelSource = await session.getBillingModelSource();
+  const preferredModel =
+    billingModelSource === "original" ? session.getOriginalModel() : session.getCurrentModel();
+
+  return preferredModel ?? resolvedPricing.resolvedModelName;
 }
 
 function getRequestedCodexServiceTier(session: ProxySession): string | null {
@@ -1280,7 +1295,7 @@ export class ProxyResponseHandler {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
-                ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+                await ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
                   matchLongContextPricing(billableUsageMetrics, resolvedPricing.priceData)
                     ?.pricing ?? null;
@@ -2405,7 +2420,7 @@ export class ProxyResponseHandler {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
-                ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+                await ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
                   matchLongContextPricing(billableUsageForCost, resolvedPricing.priceData)
                     ?.pricing ?? null;
@@ -3665,7 +3680,7 @@ export async function finalizeRequestStats(
         session.getGroupCostMultiplier()
       );
       if (costUpdateResult.resolvedPricing) {
-        ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
+        await ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
       }
       if (costUpdateResult.longContextPricingApplied) {
         ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -3761,7 +3776,7 @@ export async function finalizeRequestStats(
       if (billableNormalizedUsage && session.request.model) {
         const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
         if (resolvedPricing) {
-          ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+          await ensurePricingResolutionSpecialSetting(session, resolvedPricing);
           const longContextPricing =
             matchLongContextPricing(billableNormalizedUsage, resolvedPricing.priceData)?.pricing ??
             null;
@@ -3869,7 +3884,7 @@ async function trackCostToRedis(
         : resolvedPricingOverride;
     if (!resolvedPricing) return;
 
-    ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+    await ensurePricingResolutionSpecialSetting(session, resolvedPricing);
     const longContextPricing =
       longContextPricingOverride === undefined
         ? (matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null)

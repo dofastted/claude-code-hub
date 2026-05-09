@@ -29,6 +29,7 @@ export async function DashboardHeader({ session, locale }: DashboardHeaderProps)
       ? [{ href: "/dashboard/quotas", label: t("quotasManagement") }]
       : [{ href: "/dashboard/my-quota", label: t("myQuota") }]),
     { href: "/dashboard/users", label: t("userManagement") },
+    { href: "/status", label: t("systemStatus") },
     { href: "/usage-doc", label: t("documentation") },
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
   ];

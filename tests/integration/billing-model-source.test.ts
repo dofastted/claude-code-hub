@@ -554,6 +554,165 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(sessionCosts[0]).toBe("50");
   });
 
+  it("nested pricing: gpt-5.5(high) should fall back to canonical gpt-5.5 pricing when provider is chatgpt", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    const detailPayloads: Array<Record<string, unknown>> = [];
+    vi.mocked(updateMessageRequestDetails).mockImplementation(async (_id: number, payload) => {
+      detailPayloads.push(payload as Record<string, unknown>);
+    });
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.5(high)") {
+        return null;
+      }
+      if (modelName === "gpt-5.5") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 2.5,
+              output_cost_per_token: 15,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+    const rateLimitCosts = captureRateLimitCosts();
+
+    const sessionCosts: string[] = [];
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        if (typeof payload.costUsd === "string") {
+          sessionCosts.push(payload.costUsd);
+        }
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.5(high)",
+      redirectedModel: "gpt-5.5(high)",
+      sessionId: "sess-gpt55-high-chatgpt",
+      messageId: 3101,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+    });
+
+    const response = createNonStreamResponse({ input_tokens: 2, output_tokens: 3 });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("50");
+    expect(sessionCosts[0]).toBe("50");
+    expect(rateLimitCosts[0]).toBe(50);
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(1, "gpt-5.5(high)");
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "gpt-5.5");
+
+    const pricingResolution = detailPayloads
+      .flatMap((payload) =>
+        Array.isArray(payload.specialSettings) ? payload.specialSettings : ([] as unknown[])
+      )
+      .find(
+        (setting): setting is Record<string, unknown> =>
+          !!setting &&
+          typeof setting === "object" &&
+          (setting as Record<string, unknown>).type === "pricing_resolution"
+      );
+
+    expect(pricingResolution).toMatchObject({
+      type: "pricing_resolution",
+      modelName: "gpt-5.5(high)",
+      resolvedModelName: "gpt-5.5",
+      resolvedPricingProviderKey: "openai",
+    });
+  });
+
+  it("pricing resolution special setting should use original model when billingModelSource=original", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    const detailPayloads: Array<Record<string, unknown>> = [];
+    vi.mocked(updateMessageRequestDetails).mockImplementation(async (_id: number, payload) => {
+      detailPayloads.push(payload as Record<string, unknown>);
+    });
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.5(high)") {
+        return null;
+      }
+      if (modelName === "gpt-5.5") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 2.5,
+              output_cost_per_token: 15,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    captureRateLimitCosts();
+
+    const session = createSession({
+      originalModel: "gpt-5.5(high)",
+      redirectedModel: "claude-opus-4-5",
+      sessionId: "sess-gpt55-high-original-source",
+      messageId: 3102,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+    });
+
+    const response = createNonStreamResponse({ input_tokens: 2, output_tokens: 3 });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    const pricingResolution = detailPayloads
+      .flatMap((payload) =>
+        Array.isArray(payload.specialSettings) ? payload.specialSettings : ([] as unknown[])
+      )
+      .find(
+        (setting): setting is Record<string, unknown> =>
+          !!setting &&
+          typeof setting === "object" &&
+          (setting as Record<string, unknown>).type === "pricing_resolution"
+      );
+
+    expect(pricingResolution).toMatchObject({
+      type: "pricing_resolution",
+      modelName: "gpt-5.5(high)",
+      resolvedModelName: "gpt-5.5",
+      resolvedPricingProviderKey: "openai",
+    });
+  });
+
   it("codex fast: requested mode ignores actual priority when request tier is default", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);

@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { isPublicStatusDevMockSearchParamValue } from "@/lib/public-status/dev-mock";
 import { loadPublicStatusPageData } from "@/lib/public-status/public-api-loader";
 import { PublicStatusView } from "./_components/public-status-view";
 
@@ -6,10 +7,13 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicStatusPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams?: Promise<{ mock?: string | string[] }>;
 }) {
   const { locale } = await params;
+  const mock = isPublicStatusDevMockSearchParamValue((await searchParams)?.mock);
   const t = await getTranslations({ locale, namespace: "settings.statusPage.public" });
   const {
     followServerDefaults,
@@ -19,7 +23,7 @@ export default async function PublicStatusPage({
     siteTitle,
     status,
     timeZone,
-  } = await loadPublicStatusPageData();
+  } = await loadPublicStatusPageData({ mock: mock ? "1" : undefined });
 
   return (
     <PublicStatusView
@@ -29,6 +33,7 @@ export default async function PublicStatusPage({
       followServerDefaults={followServerDefaults}
       initialStatus={status}
       locale={locale}
+      mock={mock}
       siteTitle={siteTitle}
       timeZone={timeZone}
       labels={{

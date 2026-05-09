@@ -76,6 +76,63 @@ describe("public status public API loader", () => {
     expect(result.initialPayload.groups).toHaveLength(1);
   });
 
+  it("passes development mock opt-in through the public route contract", async () => {
+    mockPublicStatusGet.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          generatedAt: "2026-04-22T10:00:00.000Z",
+          freshUntil: "2026-04-22T10:05:00.000Z",
+          status: "ready",
+          rebuildState: {
+            state: "fresh",
+            hasSnapshot: true,
+            reason: null,
+          },
+          defaults: {
+            intervalMinutes: 5,
+            rangeHours: 24,
+          },
+          resolvedQuery: {
+            intervalMinutes: 5,
+            rangeHours: 24,
+            groupSlugs: ["anthropic-edge"],
+            models: [],
+            statuses: [],
+            q: null,
+            include: ["meta", "defaults", "groups", "timeline"],
+          },
+          meta: {
+            siteTitle: "Claude Code Hub",
+            siteDescription: "Development public status mock",
+            timeZone: "UTC",
+          },
+          groups: [
+            {
+              publicGroupSlug: "anthropic-edge",
+              displayName: "Anthropic Edge",
+              explanatoryCopy: "Development preview data",
+              models: [],
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+
+    const { loadPublicStatusPageData } = await import("@/lib/public-status/public-api-loader");
+    const result = await loadPublicStatusPageData({ groupSlug: "anthropic-edge", mock: "1" });
+    const request = mockPublicStatusGet.mock.calls[0][0] as Request;
+
+    expect(request.url).toBe("http://localhost/api/public-status?groupSlug=anthropic-edge&mock=1");
+    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.initialPayload.groups).toHaveLength(1);
+  });
+
   it("maps route-level invalid-query failures to a deterministic loader error", async () => {
     mockPublicStatusGet.mockResolvedValue(
       new Response(JSON.stringify({ error: "Invalid public status query parameters" }), {

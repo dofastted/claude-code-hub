@@ -268,6 +268,99 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "redirected-model");
   });
 
+  it("应在 GPT 模型带档位后缀时回退到规范模型名查价", async () => {
+    const canonicalPriceData: ModelPriceData = {
+      mode: "responses",
+      model_family: "gpt",
+      pricing: {
+        openai: {
+          input_cost_per_token: 3,
+          output_cost_per_token: 15,
+        },
+      },
+    };
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makePriceRecord("gpt-5.5", canonicalPriceData));
+
+    const session = createSession({
+      originalModel: "gpt-5.5(high)",
+      redirectedModel: "claude-opus-4-5",
+    });
+
+    const provider = {
+      id: 77,
+      name: "ChatGPT",
+      url: "https://chatgpt.com/backend-api/codex",
+      providerType: "codex",
+    } as Provider;
+
+    const result = await session.getResolvedPricingByBillingSource(provider);
+
+    expect(result?.resolvedModelName).toBe("gpt-5.5");
+    expect(result?.resolvedPricingProviderKey).toBe("openai");
+    expect(result?.priceData.selected_pricing_provider).toBe("openai");
+    expect(findLatestPriceByModel).toHaveBeenCalledTimes(2);
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(1, "gpt-5.5(high)");
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "gpt-5.5");
+  });
+
+  it("非 GPT 模型带括号时不应做规范化回退", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockResolvedValue(null);
+
+    const session = createSession({
+      originalModel: "custom-model(high)",
+      redirectedModel: "redirected-model",
+    });
+
+    await session.getCachedPriceDataByBillingSource();
+
+    expect(findLatestPriceByModel).toHaveBeenCalledTimes(2);
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(1, "custom-model(high)");
+    expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "redirected-model");
+  });
+
+  it("original 计费来源下应返回原始模型作为计费语义模型名", async () => {
+    const canonicalPriceData: ModelPriceData = {
+      mode: "responses",
+      model_family: "gpt",
+      pricing: {
+        openai: {
+          input_cost_per_token: 3,
+          output_cost_per_token: 15,
+        },
+      },
+    };
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makePriceRecord("gpt-5.5", canonicalPriceData));
+
+    const session = createSession({
+      originalModel: "gpt-5.5(high)",
+      redirectedModel: "claude-opus-4-5",
+      requestMessage: { service_tier: "default" },
+    });
+
+    const provider = {
+      id: 77,
+      name: "ChatGPT",
+      url: "https://chatgpt.com/backend-api/codex",
+      providerType: "codex",
+    } as Provider;
+
+    const result = await session.getResolvedPricingByBillingSource(provider);
+
+    expect(await session.getBillingModelSource()).toBe("original");
+    expect(session.getOriginalModel()).toBe("gpt-5.5(high)");
+    expect(session.getCurrentModel()).toBe("claude-opus-4-5");
+    expect(result?.resolvedModelName).toBe("gpt-5.5");
+  });
+
   it("应在 getSystemSettings 失败且无缓存时回退到 redirected 并继续价格解析", async () => {
     const redirectedPriceData: ModelPriceData = {
       input_cost_per_token: 3,

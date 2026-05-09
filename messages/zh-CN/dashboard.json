@@ -783,6 +783,7 @@
     "myQuota": "我的配额",
     "quotasManagement": "限额管理",
     "providers": "供应商管理",
+    "systemStatus": "状态页",
     "auditLogs": "审计日志",
     "documentation": "文档",
     "systemSettings": "系统设置",
@@ -792,7 +793,7 @@
   },
   "portal": {
     "title": "门户订阅",
-    "description": "管理门户套餐、用户映射和订阅记录。",
+    "description": "管理门户套餐、用户映射、测试 key 和订阅记录。",
     "sections": {
       "planForm": "套餐模板",
       "planFormDesc": "在 CCH 中创建或更新门户套餐模板。",
@@ -800,12 +801,14 @@
       "plansDesc": "参考 sub2api 的订阅套餐页，通过列表、弹窗和开关管理门户套餐。",
       "provision": "开通订阅",
       "provisionDesc": "为门户订单创建或复用 CCH 用户和默认 key。",
-      "users": "门户用户池",
-      "usersDesc": "门户用户与 CCH 用户之间的固定映射。",
-      "subscriptions": "订阅记录",
-      "subscriptionsDesc": "按订单保存的开通结果和限额快照。"
-    },
-    "fields": {
+    "users": "门户用户池",
+    "usersDesc": "门户用户与 CCH 用户之间的固定映射，也包含测试 key 用户和批次。",
+    "temporaryKeys": "测试 key",
+    "temporaryKeysDesc": "查看测试 key 用户、批次和临时 key 下载/销毁。",
+    "subscriptions": "订阅记录",
+    "subscriptionsDesc": "按订单保存的开通结果和限额快照。"
+  },
+  "fields": {
       "planId": "套餐 ID",
       "name": "名称",
       "price": "价格",
@@ -826,8 +829,8 @@
       "plan": "套餐",
       "assignedSource": "来源",
       "notes": "备注"
-    },
-    "columns": {
+  },
+  "columns": {
       "plan": "套餐",
       "price": "价格",
       "validity": "有效期",
@@ -1584,9 +1587,40 @@
         "unknown": "未知",
         "healthy": "健康",
         "unhealthy": "异常"
-      }
+    }
+  },
+  "temporaryKeys": {
+    "title": "测试 key 分组",
+    "description": "测试 key 用户会置顶显示，临时 key 批次支持批量下载和批量销毁。",
+    "fields": {
+      "sourceUserId": "源用户 ID",
+      "sourceKeyId": "源 Key ID",
+      "count": "创建数量",
+      "name": "批次名称",
+      "customLimitTotalUsd": "单 key 总额度",
+      "providerGroup": "分组",
+      "keys": "Keys",
+      "actions": "操作"
     },
-    "endpoint": {
+    "actions": {
+      "createBatch": "创建批次",
+      "download": "下载批次",
+      "delete": "销毁批次",
+      "refresh": "刷新"
+    },
+    "messages": {
+      "created": "已创建 {count} 个测试 key",
+      "downloaded": "已下载批次",
+      "deleted": "已销毁批次",
+      "noBatches": "暂无测试 key 批次"
+    },
+    "errors": {
+      "createFailed": "创建测试 key 批次失败",
+      "downloadFailed": "下载测试 key 批次失败",
+      "deleteFailed": "销毁测试 key 批次失败"
+    }
+  },
+  "endpoint": {
       "selectVendor": "选择供应商",
       "selectType": "选择类型"
     },
@@ -1780,6 +1814,13 @@
         "confirm": "是的，重置全部",
         "loading": "重置中...",
         "success": "所有统计已重置"
+      },
+      "syncQuota": {
+        "button": "同步用户额度到 Key",
+        "loading": "同步中...",
+        "success": "已同步到 {count} 个 Key",
+        "noKeys": "该用户下暂无可同步的 Key",
+        "error": "同步用户额度到 Key 失败"
       }
     },
     "batchEdit": {

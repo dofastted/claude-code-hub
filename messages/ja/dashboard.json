@@ -781,6 +781,7 @@
     "quotasManagement": "クォータ管理",
     "userManagement": "ユーザー",
     "providers": "プロバイダー管理",
+    "systemStatus": "ステータス",
     "auditLogs": "監査ログ",
     "documentation": "ドキュ",
     "systemSettings": "設定",
@@ -790,7 +791,7 @@
   },
   "portal": {
     "title": "ポータル契約",
-    "description": "ポータルプラン、ユーザー連携、契約記録を管理します。",
+    "description": "ポータルプラン、ユーザー連携、テスト key、契約記録を管理します。",
     "sections": {
       "planForm": "プランテンプレート",
       "planFormDesc": "CCH に保存するポータルプランを作成または更新します。",
@@ -799,7 +800,9 @@
       "provision": "契約を作成",
       "provisionDesc": "ポータル注文に CCH ユーザーと既定 key を作成または再利用します。",
       "users": "ポータルユーザー",
-      "usersDesc": "ポータルユーザーと CCH ユーザーの固定リンクです。",
+      "usersDesc": "ポータルユーザーと CCH ユーザーの固定リンクで、テスト key ユーザーとバッチも含みます。",
+      "temporaryKeys": "テスト key",
+      "temporaryKeysDesc": "テスト key ユーザー、バッチ、臨時 key のダウンロードと削除を確認します。",
       "subscriptions": "契約記録",
       "subscriptionsDesc": "注文ごとの作成結果とクォータの記録です。"
     },
@@ -1485,6 +1488,37 @@
       "refreshFailed": "更新に失敗しました。再試行してください"
     }
   },
+  "temporaryKeys": {
+    "title": "テスト key グループ",
+    "description": "テスト key ユーザーは先頭に表示されます。臨時 key バッチは一括ダウンロードと一括削除に対応します。",
+    "fields": {
+      "sourceUserId": "元ユーザー ID",
+      "sourceKeyId": "元 Key ID",
+      "count": "作成数",
+      "name": "バッチ名",
+      "customLimitTotalUsd": "key ごとの総クォータ",
+      "providerGroup": "グループ",
+      "keys": "Keys",
+      "actions": "操作"
+    },
+    "actions": {
+      "createBatch": "バッチを作成",
+      "download": "バッチをダウンロード",
+      "delete": "バッチを削除",
+      "refresh": "更新"
+    },
+    "messages": {
+      "created": "{count} 個のテスト key を作成しました",
+      "downloaded": "バッチをダウンロードしました",
+      "deleted": "バッチを削除しました",
+      "noBatches": "テスト key バッチはまだありません"
+    },
+    "errors": {
+      "createFailed": "テスト key バッチの作成に失敗しました",
+      "downloadFailed": "テスト key バッチのダウンロードに失敗しました",
+      "deleteFailed": "テスト key バッチの削除に失敗しました"
+    }
+  },
   "rateLimits": {
     "title": "レート制限イベント統計",
     "description": "レート制限イベントの統計データを表示・分析",
@@ -1757,6 +1791,13 @@
         "confirm": "はい、すべてリセット",
         "loading": "リセット中...",
         "success": "すべての統計がリセットされました"
+      },
+      "syncQuota": {
+        "button": "ユーザークォータを Key に同期",
+        "loading": "同期中...",
+        "success": "{count} 個の Key に同期しました",
+        "noKeys": "このユーザーには同期できる Key がありません",
+        "error": "ユーザークォータの Key への同期に失敗しました"
       }
     },
     "batchEdit": {

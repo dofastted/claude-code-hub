@@ -37,13 +37,22 @@ type PortalContext = NonNullable<ReturnType<typeof validatePortalRequest>>;
 
 const nullableNumberSchema = z.number().finite().nullable().optional();
 const dateStringSchema = z.string().datetime().nullable().optional();
-const portalSafeIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/);
-const portalPlanIdSchema = z.string().min(1).max(100).regex(/^[A-Za-z0-9._:-]+$/);
+const portalSafeIdSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+const portalPlanIdSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(/^[A-Za-z0-9._:-]+$/);
 
 const portalUserCreateSchema = z
   .object({
     name: z.string().min(1).max(200),
     description: z.string().max(2000).optional().default(""),
+    providerGroup: z.string().max(200).optional(),
     rpm: nullableNumberSchema,
     dailyQuota: nullableNumberSchema,
     limit5hUsd: nullableNumberSchema,
@@ -82,6 +91,7 @@ const portalKeyCreateSchema = z
     limitMonthlyUsd: nullableNumberSchema,
     limitTotalUsd: nullableNumberSchema,
     limitConcurrentSessions: z.number().int().nonnegative().optional(),
+    providerGroup: z.string().max(200).optional(),
     cacheTtlPreference: z.enum(["inherit", "5m", "1h"]).optional(),
   })
   .strict();
@@ -137,23 +147,23 @@ function parseDate(value: string | null | undefined): Date | null | undefined {
   return new Date(value);
 }
 
-function groupContains(value: string | null | undefined, group: string): boolean {
-  return parseProviderGroups(normalizeProviderGroup(value)).includes(group);
+function groupContainsAllowedPortalGroup(
+  value: string | null | undefined,
+  ctx: PortalContext
+): boolean {
+  const groups = parseProviderGroups(normalizeProviderGroup(value));
+  return groups.includes(ctx.providerGroup) || groups.includes(ctx.testKeyGroup);
 }
 
 function ensurePortalUser(user: User | null, ctx: PortalContext): User {
-  if (!user || !groupContains(user.providerGroup, ctx.providerGroup)) {
+  if (!user || !groupContainsAllowedPortalGroup(user.providerGroup, ctx)) {
     throw errorJson("Not Found", 404, "NOT_FOUND");
   }
   return user;
 }
 
 function ensurePortalKey(key: Key | null, userId: number, ctx: PortalContext): Key {
-  if (
-    !key ||
-    key.userId !== userId ||
-    normalizeProviderGroup(key.providerGroup) !== ctx.providerGroup
-  ) {
+  if (!key || key.userId !== userId || !groupContainsAllowedPortalGroup(key.providerGroup, ctx)) {
     throw errorJson("Not Found", 404, "NOT_FOUND");
   }
   return key;
@@ -209,6 +219,41 @@ function serializeKey(key: Key, options?: { includeFullKey?: boolean }) {
   };
 }
 
+function isTemporaryPortalGroup(
+  value: string | null | undefined,
+  ctx: Pick<PortalContext, "testKeyGroup">
+): boolean {
+  return parseProviderGroups(normalizeProviderGroup(value)).includes(ctx.testKeyGroup);
+}
+
+function sortPortalUsers(users: User[], ctx: PortalContext): User[] {
+  return [...users].sort((a, b) => {
+    const aTemporary = isTemporaryPortalGroup(a.providerGroup, ctx);
+    const bTemporary = isTemporaryPortalGroup(b.providerGroup, ctx);
+    if (aTemporary !== bTemporary) {
+      return aTemporary ? -1 : 1;
+    }
+
+    return a.id - b.id;
+  });
+}
+
+function sortPortalKeys(keys: Key[], ctx: PortalContext): Key[] {
+  return [...keys].sort((a, b) => {
+    const aTemporary = isTemporaryPortalGroup(a.providerGroup, ctx);
+    const bTemporary = isTemporaryPortalGroup(b.providerGroup, ctx);
+    if (aTemporary !== bTemporary) {
+      return aTemporary ? -1 : 1;
+    }
+
+    if (a.createdAt.getTime() !== b.createdAt.getTime()) {
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    }
+
+    return a.id - b.id;
+  });
+}
+
 async function ensurePortalDefaults(ctx: PortalContext): Promise<void> {
   await ensureDefaultUserGroupConfigs(
     buildDefaultUserGroupConfigs({
@@ -226,26 +271,35 @@ function ensureTemporaryGroupAllowed(providerGroup: string, ctx: PortalContext):
   }
 }
 
+function resolvePortalManagedGroup(value: string | undefined, ctx: PortalContext): string {
+  const providerGroup = normalizeProviderGroup(value ?? ctx.providerGroup);
+  ensureTemporaryGroupAllowed(providerGroup, ctx);
+  return providerGroup;
+}
+
 async function listPortalUsers(ctx: PortalContext): Promise<Response> {
   await ensurePortalDefaults(ctx);
   const users = await findUserList(5000, 0);
+  const portalUsers = sortPortalUsers(
+    users.filter((user) => groupContainsAllowedPortalGroup(user.providerGroup, ctx)),
+    ctx
+  );
   return json({
     ok: true,
-    data: users
-      .filter((user) => groupContains(user.providerGroup, ctx.providerGroup))
-      .map(serializeUser),
+    data: portalUsers.map(serializeUser),
   });
 }
 
 async function createPortalUser(request: Request, ctx: PortalContext): Promise<Response> {
   await ensurePortalDefaults(ctx);
   const body = portalUserCreateSchema.parse(await readJson(request));
+  const providerGroup = resolvePortalManagedGroup(body.providerGroup, ctx);
   const user = await createUser({
     name: body.name,
     description: body.description,
     rpm: body.rpm,
     dailyQuota: body.dailyQuota,
-    providerGroup: ctx.providerGroup,
+    providerGroup,
     tags: body.tags,
     limit5hUsd: body.limit5hUsd ?? undefined,
     limitWeeklyUsd: body.limitWeeklyUsd ?? undefined,
@@ -272,9 +326,9 @@ async function updatePortalUser(
   const body = portalUserUpdateSchema.parse(await readJson(request));
   if (
     body.providerGroup !== undefined &&
-    normalizeProviderGroup(body.providerGroup) !== ctx.providerGroup
+    !groupContainsAllowedPortalGroup(body.providerGroup, ctx)
   ) {
-    return errorJson("门户 API 不能修改用户分组", 403, "PROVIDER_GROUP_FORBIDDEN");
+    return errorJson("门户 API 不能修改为未允许的用户分组", 403, "PROVIDER_GROUP_FORBIDDEN");
   }
 
   const updated = await updateUser(user.id, {
@@ -282,6 +336,8 @@ async function updatePortalUser(
     description: body.description,
     rpm: body.rpm,
     dailyQuota: body.dailyQuota,
+    providerGroup:
+      body.providerGroup !== undefined ? normalizeProviderGroup(body.providerGroup) : undefined,
     tags: body.tags,
     limit5hUsd: body.limit5hUsd,
     limitWeeklyUsd: body.limitWeeklyUsd,
@@ -301,11 +357,13 @@ async function updatePortalUser(
 async function listPortalKeys(userId: number, ctx: PortalContext): Promise<Response> {
   const user = ensurePortalUser(await findUserById(userId), ctx);
   const keys = await findKeyList(user.id);
+  const portalKeys = sortPortalKeys(
+    keys.filter((key) => groupContainsAllowedPortalGroup(key.providerGroup, ctx)),
+    ctx
+  );
   return json({
     ok: true,
-    data: keys
-      .filter((key) => normalizeProviderGroup(key.providerGroup) === ctx.providerGroup)
-      .map((key) => serializeKey(key)),
+    data: portalKeys.map((key) => serializeKey(key)),
   });
 }
 
@@ -316,6 +374,10 @@ async function createPortalKey(
 ): Promise<Response> {
   const user = ensurePortalUser(await findUserById(userId), ctx);
   const body = portalKeyCreateSchema.parse(await readJson(request));
+  const providerGroup = resolvePortalManagedGroup(
+    body.providerGroup ?? user.providerGroup ?? undefined,
+    ctx
+  );
   const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
   const key = await createKey({
     user_id: user.id,
@@ -333,7 +395,7 @@ async function createPortalKey(
     limit_monthly_usd: body.limitMonthlyUsd,
     limit_total_usd: body.limitTotalUsd,
     limit_concurrent_sessions: body.limitConcurrentSessions,
-    provider_group: ctx.providerGroup,
+    provider_group: providerGroup,
     cache_ttl_preference: body.cacheTtlPreference,
   });
   await syncUserProviderGroupFromKeysForSystem(user.id);
@@ -350,6 +412,9 @@ async function updatePortalKey(
   const user = ensurePortalUser(await findUserById(userId), ctx);
   const key = ensurePortalKey(await findKeyById(keyId), user.id, ctx);
   const body = portalKeyUpdateSchema.parse(await readJson(request));
+  if (body.providerGroup !== undefined) {
+    ensureTemporaryGroupAllowed(body.providerGroup, ctx);
+  }
   const updated = await import("@/repository/key").then((repo) =>
     repo.updateKey(key.id, {
       name: body.name,
@@ -365,6 +430,8 @@ async function updatePortalKey(
       limit_monthly_usd: body.limitMonthlyUsd,
       limit_total_usd: body.limitTotalUsd,
       limit_concurrent_sessions: body.limitConcurrentSessions,
+      provider_group:
+        body.providerGroup !== undefined ? normalizeProviderGroup(body.providerGroup) : undefined,
       cache_ttl_preference: body.cacheTtlPreference,
     })
   );

@@ -20,7 +20,7 @@ import { buildDefaultUserGroupConfigs } from "@/fork/portal/user-groups/defaults
 import { syncUserProviderGroupFromKeysForSystem } from "@/fork/portal/user-groups/sync";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
-import { deleteKey, findKeyById, findKeyList } from "@/repository/key";
+import { deleteKey, findKeyById } from "@/repository/key";
 import { ensureProviderGroupsExist } from "@/repository/provider-groups";
 import { findUserById } from "@/repository/user";
 import type { CreateKeyData, Key } from "@/types/key";
@@ -186,21 +186,6 @@ export async function deleteTemporaryKeyBatch(input: {
   }
 
   const affectedUserIds = Array.from(new Set(keysToDelete.map((key) => key.userId)));
-  for (const userId of affectedUserIds) {
-    const userKeys = await findKeyList(userId);
-    const deletingIds = new Set(
-      keysToDelete.filter((key) => key.userId === userId).map((key) => key.id)
-    );
-    const remainingActive = userKeys.some((key) => key.isEnabled && !deletingIds.has(key.id));
-    if (!remainingActive) {
-      throw new TemporaryKeyBatchError(
-        "删除后会导致用户没有可用 key，已停止删除",
-        "LAST_ACTIVE_KEY",
-        409
-      );
-    }
-  }
-
   const deletedKeyIds: number[] = [];
   for (const key of keysToDelete) {
     const deleted = await deleteKey(key.id);

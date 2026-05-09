@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockReadPublicStatusPayload = vi.hoisted(() => vi.fn());
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/public-status/config-snapshot", () => ({
+  readCurrentInternalPublicStatusConfigSnapshot: mockReadCurrentInternalPublicStatusConfigSnapshot,
   readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
 }));
 
@@ -19,6 +21,7 @@ vi.mock("@/lib/public-status/rebuild-hints", () => ({
 describe("GET /api/public-status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue(null);
   });
 
   it("returns 200 with an explicit no-snapshot body when snapshot is missing", async () => {
@@ -85,6 +88,39 @@ describe("GET /api/public-status", () => {
     });
   });
 
+  it("serves development mock data only when explicitly opted in", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "openai-core" }],
+    });
+    mockReadPublicStatusPayload.mockResolvedValue({
+      rebuildState: "fresh",
+      sourceGeneration: "gen-ignored",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      freshUntil: "2026-04-21T10:05:00.000Z",
+      groups: [],
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status?mock=1"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "ready",
+      meta: {
+        siteDescription: "Development public status mock",
+      },
+    });
+    expect(body.groups.map((group: { publicGroupSlug: string }) => group.publicGroupSlug)).toEqual([
+      "openai-core",
+      "anthropic-edge",
+      "regional-gateway",
+    ]);
+    expect(mockReadPublicStatusPayload).not.toHaveBeenCalled();
+  });
+
   it("returns 200 for a configured default-group custom slug and preserves hasConfiguredGroups", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       defaultIntervalMinutes: 5,
@@ -121,6 +157,49 @@ describe("GET /api/public-status", () => {
     expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
       expect.objectContaining({
         hasConfiguredGroups: true,
+      })
+    );
+  });
+
+  it("passes the internal config snapshot into the read store for DB rollups", async () => {
+    const publicSnapshot = {
+      configVersion: "cfg-public",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "openai" }],
+    };
+    const internalSnapshot = {
+      configVersion: "cfg-internal",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [
+        {
+          slug: "openai",
+          sourceGroupName: "internal-openai",
+          displayName: "OpenAI",
+          sortOrder: 1,
+          models: [],
+        },
+      ],
+    };
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(publicSnapshot);
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue(internalSnapshot);
+    mockReadPublicStatusPayload.mockResolvedValue({
+      rebuildState: "fresh",
+      sourceGeneration: "gen-1",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      freshUntil: "2026-04-21T10:05:00.000Z",
+      groups: [],
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status"));
+
+    expect(response.status).toBe(200);
+    expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configVersion: "cfg-public",
+        configSnapshot: internalSnapshot,
       })
     );
   });

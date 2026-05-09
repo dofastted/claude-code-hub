@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
+import {
+  readCurrentInternalPublicStatusConfigSnapshot,
+  readCurrentPublicStatusConfigSnapshot,
+} from "@/lib/public-status/config-snapshot";
+import {
+  buildPublicStatusDevMockRouteResponse,
+  isPublicStatusDevMockEnabled,
+} from "@/lib/public-status/dev-mock";
 import {
   buildPublicStatusRouteResponse,
   PublicStatusQueryValidationError,
@@ -11,7 +18,25 @@ import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 export async function GET(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
+    if (isPublicStatusDevMockEnabled(url.searchParams)) {
+      const defaults = {
+        intervalMinutes: 5,
+        rangeHours: 24,
+      };
+      const query = parsePublicStatusQuery(url.searchParams, defaults);
+
+      return NextResponse.json(
+        buildPublicStatusDevMockRouteResponse({
+          query,
+          defaults,
+        })
+      );
+    }
+
+    const [configSnapshot, internalConfigSnapshot] = await Promise.all([
+      readCurrentPublicStatusConfigSnapshot(),
+      readCurrentInternalPublicStatusConfigSnapshot(),
+    ]);
     const defaults = {
       intervalMinutes: configSnapshot?.defaultIntervalMinutes ?? 5,
       rangeHours: configSnapshot?.defaultRangeHours ?? 24,
@@ -23,6 +48,7 @@ export async function GET(request: Request): Promise<Response> {
       intervalMinutes: query.intervalMinutes,
       rangeHours: query.rangeHours,
       configVersion: configSnapshot?.configVersion,
+      configSnapshot: internalConfigSnapshot ?? configSnapshot,
       hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
       nowIso: new Date().toISOString(),
       triggerRebuildHint: async (reason) => {

@@ -56,6 +56,7 @@ interface PublicStatusViewProps {
   rangeHours: number;
   followServerDefaults?: boolean;
   filterSlug?: string;
+  mock?: boolean;
   locale: string;
   siteTitle: string;
   timeZone: string;
@@ -158,6 +159,7 @@ export function PublicStatusView({
   rangeHours,
   followServerDefaults = false,
   filterSlug,
+  mock = false,
   locale,
   siteTitle,
   timeZone,
@@ -184,6 +186,9 @@ export function PublicStatusView({
         if (filterSlug) {
           params.set("groupSlug", filterSlug);
         }
+        if (mock) {
+          params.set("mock", "1");
+        }
         const requestUrl =
           params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
         const response = await fetch(requestUrl, { cache: "no-store" });
@@ -207,7 +212,14 @@ export function PublicStatusView({
     }
     const pollId = window.setInterval(() => void refresh(), 30_000);
     return () => window.clearInterval(pollId);
-  }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours, filterSlug]);
+  }, [
+    followServerDefaults,
+    initialPayload.rebuildState,
+    intervalMinutes,
+    rangeHours,
+    filterSlug,
+    mock,
+  ]);
 
   useEffect(() => {
     setGroupOrder(loadGroupOrder());
@@ -330,16 +342,18 @@ export function PublicStatusView({
             : labels.noData;
 
     return (
-      <div className="cch-status-bg relative flex min-h-screen items-center justify-center px-4 text-foreground">
-        <div className="flex max-w-lg flex-col items-center gap-4 rounded-3xl border border-border/60 bg-background/60 px-8 py-10 text-center backdrop-blur-sm">
-          <Activity className="size-16 text-muted-foreground/50" aria-hidden="true" />
+      <div className="cch-status-bg relative flex min-h-screen items-center justify-center px-4">
+        <div className="cch-status-glass flex w-full max-w-lg flex-col items-center gap-4 rounded-3xl px-6 py-10 text-center sm:px-8">
+          <span className="cch-status-icon-tile flex size-16 items-center justify-center rounded-3xl">
+            <Activity className="size-8" aria-hidden="true" />
+          </span>
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase text-amber-200/80">
               {labels.systemStatus}
             </p>
-            <h1 className="text-2xl font-semibold tracking-tight">{siteTitle}</h1>
-            <p className="text-base font-medium text-foreground">{emptyHeadline}</p>
-            <p className="text-sm text-muted-foreground">{labels.emptyDescription}</p>
+            <h1 className="text-2xl font-semibold text-slate-50">{siteTitle}</h1>
+            <p className="text-base font-medium text-slate-100">{emptyHeadline}</p>
+            <p className="text-sm leading-6 text-slate-400">{labels.emptyDescription}</p>
           </div>
         </div>
       </div>
@@ -347,8 +361,8 @@ export function PublicStatusView({
   }
 
   return (
-    <div className="cch-status-bg relative min-h-screen text-foreground">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
+    <div className="cch-status-bg relative min-h-screen">
+      <div className="cch-status-shell mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8 lg:py-10">
         <StatusHero
           siteTitle={siteTitle}
           heroPrimary={labels.heroPrimary}
@@ -373,7 +387,7 @@ export function PublicStatusView({
         />
 
         {filteredGroups.length === 0 ? (
-          <div className="rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-sm text-muted-foreground backdrop-blur-sm">
+          <div className="cch-status-glass rounded-2xl p-8 text-center text-sm text-slate-400">
             {labels.emptyByFilter}
           </div>
         ) : (
@@ -420,18 +434,18 @@ export function PublicStatusView({
                             return (
                               <article
                                 key={model.publicModelKey}
-                                className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/50 p-4 backdrop-blur-sm"
+                                className="cch-status-card flex flex-col gap-3 rounded-2xl p-4 backdrop-blur-sm"
                               >
                                 <header className="flex items-start justify-between gap-2">
                                   <div className="flex min-w-0 items-center gap-2">
-                                    <span className="inline-flex size-8 items-center justify-center rounded-lg border border-border/60 bg-muted/30">
+                                    <span className="inline-flex size-9 items-center justify-center rounded-xl border border-slate-500/20 bg-slate-950/40 text-slate-200">
                                       <Icon className="size-4" />
                                     </span>
                                     <div className="min-w-0">
-                                      <h3 className="truncate text-sm font-semibold">
+                                      <h3 className="truncate text-sm font-semibold text-slate-50">
                                         {model.label}
                                       </h3>
-                                      <p className="truncate font-mono text-[10px] text-muted-foreground">
+                                      <p className="truncate font-mono text-[10px] text-slate-400">
                                         {labels.requestTypes[model.requestTypeBadge] ??
                                           model.requestTypeBadge}
                                       </p>
@@ -439,7 +453,7 @@ export function PublicStatusView({
                                   </div>
                                   <Badge
                                     className={cn(
-                                      "border bg-transparent px-2 py-0.5 text-[10px] uppercase tracking-wide",
+                                      "border bg-transparent px-2 py-0.5 text-[10px] uppercase",
                                       variant.className
                                     )}
                                     variant="outline"
@@ -449,25 +463,25 @@ export function PublicStatusView({
                                 </header>
 
                                 <div className="grid grid-cols-2 gap-2 text-xs">
-                                  <div className="rounded-md border border-border/40 bg-muted/20 p-2">
-                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  <div className="cch-status-metric rounded-xl p-2.5">
+                                    <div className="text-[10px] uppercase text-slate-400">
                                       {labels.availability}{" "}
                                       <span className="normal-case opacity-70">
                                         ({rangeHours}H)
                                       </span>
                                     </div>
-                                    <div className="mt-1 font-mono text-base">
+                                    <div className="mt-1 font-mono text-base text-slate-50">
                                       {uptime24h === null ? "—" : `${uptime24h.toFixed(2)}%`}
                                     </div>
                                   </div>
-                                  <div className="rounded-md border border-border/40 bg-muted/20 p-2">
-                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  <div className="cch-status-metric rounded-xl p-2.5">
+                                    <div className="text-[10px] uppercase text-slate-400">
                                       {labels.ttfb}{" "}
                                       <span className="normal-case opacity-70">
                                         ({rangeHours}H)
                                       </span>
                                     </div>
-                                    <div className="mt-1 font-mono text-base">
+                                    <div className="mt-1 font-mono text-base text-slate-50">
                                       {formatTtfb(ttfb24h)}
                                     </div>
                                   </div>

@@ -15,7 +15,9 @@ import {
 } from "@/components/ui/table";
 import {
   listPortalPlans,
+  listPortalManagedUsers,
   listPortalSubscriptions,
+  listPortalTemporaryKeyBatches,
   listPortalUserLinks,
   provisionPortalSubscription,
 } from "@/fork/portal/actions";
@@ -23,6 +25,7 @@ import { getPortalConfig } from "@/fork/portal/config";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { PortalPlanManager } from "./_components/portal-plan-manager";
+import { TemporaryKeyPanel } from "./_components/temporary-key-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,12 @@ type PortalSubscriptionRow = NonNullable<
   ActionSuccessData<typeof listPortalSubscriptions>
 >["subscriptions"][number];
 type PortalUserRow = NonNullable<ActionSuccessData<typeof listPortalUserLinks>>["users"][number];
+type PortalManagedUserRow = NonNullable<
+  ActionSuccessData<typeof listPortalManagedUsers>
+>["users"][number];
+type PortalTemporaryBatchRow = NonNullable<
+  ActionSuccessData<typeof listPortalTemporaryKeyBatches>
+>["batches"][number];
 
 function textValue(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -198,15 +207,22 @@ export default async function PortalDashboardPage({
   if (session.user.role !== "admin") return redirect({ href: "/dashboard", locale });
 
   const t = await getTranslations({ locale, namespace: "dashboard.portal" });
-  const [plansResult, subscriptionsResult, usersResult] = await Promise.all([
+  const [plansResult, subscriptionsResult, usersResult, managedUsersResult, temporaryBatchesResult] =
+    await Promise.all([
     listPortalPlans({ includeDisabled: true }),
     listPortalSubscriptions({ limit: 100 }),
     listPortalUserLinks({ limit: 100 }),
+    listPortalManagedUsers({ limit: 200 }),
+    listPortalTemporaryKeyBatches({ limit: 100 }),
   ]);
 
   const plans = plansResult.ok ? plansResult.data.plans : [];
   const subscriptions = subscriptionsResult.ok ? subscriptionsResult.data.subscriptions : [];
   const users = usersResult.ok ? usersResult.data.users : [];
+  const managedUsers: PortalManagedUserRow[] = managedUsersResult.ok ? managedUsersResult.data.users : [];
+  const temporaryBatches: PortalTemporaryBatchRow[] = temporaryBatchesResult.ok
+    ? temporaryBatchesResult.data.batches
+    : [];
   const defaultProviderGroup = getPortalConfig().PORTAL_PROVIDER_GROUP;
 
   return (
@@ -226,6 +242,37 @@ export default async function PortalDashboardPage({
 
       <SectionStatic title={t("sections.users")} description={t("sections.usersDesc")}>
         <UsersTable users={users} t={t} />
+      </SectionStatic>
+
+      <SectionStatic
+        title={t("sections.temporaryKeys")}
+        description={t("sections.temporaryKeysDesc")}
+      >
+        <TemporaryKeyPanel
+          users={managedUsers
+            .filter((user) => (user.providerGroup || "").includes(getPortalConfig().PORTAL_TEST_KEY_GROUP))
+            .map((user) => ({
+              id: user.id,
+              name: user.name,
+              providerGroup: user.providerGroup,
+              keys: user.keys.map((key) => ({
+                id: key.id,
+                name: key.name,
+                providerGroup: key.providerGroup,
+                limitTotalUsd: key.limitTotalUsd ?? null,
+                createdAt: key.createdAt,
+              })),
+            }))}
+          batches={temporaryBatches.map((batch) => ({
+            id: batch.id,
+            providerGroup: batch.providerGroup,
+            name: batch.name,
+            sourceUserId: batch.sourceUserId,
+            sourceKeyId: batch.sourceKeyId,
+            createdCount: batch.createdCount,
+            createdAt: batch.createdAt,
+          }))}
+        />
       </SectionStatic>
 
       <SectionStatic

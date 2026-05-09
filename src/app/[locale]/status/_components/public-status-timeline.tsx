@@ -23,7 +23,7 @@ interface PublicStatusTimelineProps {
 function cellColor(cell: FilledTimelineCell): string {
   const { displayState, inferred, bucket } = cell;
   if (displayState === "no_data") {
-    return "bg-muted/40";
+    return "bg-slate-700/40";
   }
   if (displayState === "failed" || bucket.state === "failed") {
     return inferred ? "bg-rose-500/60" : "bg-rose-500";
@@ -77,7 +77,7 @@ export function PublicStatusTimeline({
   return (
     <TooltipProvider delayDuration={80}>
       <div
-        className="flex w-full items-center gap-[2px]"
+        className="flex w-full items-center gap-[3px] rounded-lg bg-slate-950/40 p-1"
         role="list"
         aria-label={labels.historyAriaLabel}
       >
@@ -92,14 +92,14 @@ export function PublicStatusTimeline({
                   role="listitem"
                   aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
                   className={cn(
-                    "h-6 flex-1 rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
+                    "cch-status-focus cch-status-timeline-cell h-11 flex-1 rounded-[3px] sm:h-7",
                     cellColor(cell)
                   )}
                 />
               </TooltipTrigger>
               <TooltipContent
                 side="top"
-                className="max-w-xs space-y-1 rounded-md bg-popover px-3 py-2 text-popover-foreground shadow-md"
+                className="max-w-xs space-y-1 rounded-xl border border-amber-400/20 bg-slate-950/95 px-3 py-2 text-slate-100 shadow-2xl shadow-black/40"
               >
                 {!isPlaceholder ? (
                   <p className="font-medium tabular-nums">
@@ -107,15 +107,15 @@ export function PublicStatusTimeline({
                   </p>
                 ) : null}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
-                  <span className="text-muted-foreground">{labels.availability}</span>
+                  <span className="text-slate-400">{labels.availability}</span>
                   <span className="text-right">
                     {bucket.availabilityPct === null
                       ? "—"
                       : `${bucket.availabilityPct.toFixed(2)}%`}
                   </span>
-                  <span className="text-muted-foreground">{labels.ttfb}</span>
+                  <span className="text-slate-400">{labels.ttfb}</span>
                   <span className="text-right">{formatTtfb(bucket.ttfbMs)}</span>
-                  <span className="text-muted-foreground">{labels.tps}</span>
+                  <span className="text-slate-400">{labels.tps}</span>
                   <span className="text-right">
                     {bucket.tps === null ? "—" : bucket.tps.toFixed(1)}
                   </span>

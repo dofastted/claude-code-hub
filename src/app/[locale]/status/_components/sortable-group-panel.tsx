@@ -59,8 +59,8 @@ export function SortableGroupPanel({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "rounded-2xl border border-border/60 bg-card/40 p-4 shadow-sm backdrop-blur-sm sm:p-6",
-        isDragging && "ring-2 ring-primary"
+        "cch-status-panel rounded-2xl p-4 backdrop-blur-sm sm:p-5",
+        isDragging && "ring-2 ring-amber-400/70"
       )}
     >
       <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -68,7 +68,7 @@ export function SortableGroupPanel({
           {draggable ? (
             <button
               type="button"
-              className="cursor-grab rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+              className="cch-status-focus flex size-11 cursor-grab items-center justify-center rounded-lg text-slate-400 hover:bg-amber-400/10 hover:text-amber-200 active:cursor-grabbing sm:size-9"
               aria-label={dragHandleLabel ?? displayName}
               {...attributes}
               {...listeners}
@@ -81,7 +81,7 @@ export function SortableGroupPanel({
             onClick={() => onOpenChange(!open)}
             aria-label={toggleLabel ?? displayName}
             aria-expanded={open}
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+            className="cch-status-focus flex size-11 items-center justify-center rounded-lg text-slate-400 hover:bg-amber-400/10 hover:text-amber-200 sm:size-9"
           >
             <ChevronDown
               className={cn(
@@ -93,23 +93,23 @@ export function SortableGroupPanel({
           {groupHref ? (
             <Link
               href={groupHref}
-              className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight transition-colors hover:text-primary sm:text-xl"
+              className="cch-status-focus min-w-0 flex-1 truncate rounded-lg px-1 py-1 text-lg font-semibold text-slate-50 transition-colors hover:text-amber-200 sm:text-xl"
             >
               {displayName}
             </Link>
           ) : (
-            <h2 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight sm:text-xl">
+            <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-slate-50 sm:text-xl">
               {displayName}
             </h2>
           )}
-          <span className="ml-auto flex flex-shrink-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="ml-auto flex flex-shrink-0 items-center gap-2 text-xs text-slate-400">
             {modelBadgeLabel ? (
-              <span className="rounded-md border border-border/60 bg-background/60 px-2 py-0.5">
+              <span className="cch-status-chip rounded-lg px-2 py-1">
                 {modelCount} {modelBadgeLabel}
               </span>
             ) : null}
             {issueCount > 0 && issueBadgeLabel ? (
-              <span className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-rose-600 dark:text-rose-400">
+              <span className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-rose-200">
                 {issueCount} {issueBadgeLabel}
               </span>
             ) : null}
@@ -117,7 +117,7 @@ export function SortableGroupPanel({
               <Link
                 href={groupHref}
                 aria-label={groupLinkLabel ?? displayName}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="cch-status-focus flex size-11 items-center justify-center rounded-lg text-slate-400 hover:bg-amber-400/10 hover:text-amber-200 sm:size-9"
               >
                 <ExternalLink className="size-4" />
               </Link>
@@ -125,7 +125,7 @@ export function SortableGroupPanel({
           </span>
         </div>
         {explanatoryCopy ? (
-          <p className="mt-1 pl-7 text-xs text-muted-foreground">{explanatoryCopy}</p>
+          <p className="mt-1 pl-8 text-xs leading-5 text-slate-400">{explanatoryCopy}</p>
         ) : null}
         <CollapsibleContent className="pt-4">{children}</CollapsibleContent>
       </Collapsible>

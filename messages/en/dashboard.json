@@ -783,6 +783,7 @@
     "quotasManagement": "Quotas",
     "userManagement": "Users",
     "providers": "Providers",
+    "systemStatus": "Status",
     "auditLogs": "Audit logs",
     "documentation": "Docs",
     "systemSettings": "Settings",
@@ -792,7 +793,7 @@
   },
   "portal": {
     "title": "Portal subscriptions",
-    "description": "Manage portal plans, user links, and subscription records.",
+    "description": "Manage portal plans, user links, test keys, and subscription records.",
     "sections": {
       "planForm": "Plan template",
       "planFormDesc": "Create or update a portal plan template stored in CCH.",
@@ -800,12 +801,14 @@
       "plansDesc": "Manage portal plans with the same list, dialog, and status switch pattern used by sub2api subscriptions.",
       "provision": "Provision subscription",
       "provisionDesc": "Create or reuse a CCH user and default key for a portal order.",
-      "users": "Portal user pool",
-      "usersDesc": "Stable links between portal users and CCH users.",
-      "subscriptions": "Subscription records",
-      "subscriptionsDesc": "Order-level provisioning records and quota snapshots."
-    },
-    "fields": {
+    "users": "Portal user pool",
+    "usersDesc": "Stable links between portal users and CCH users, including test-key users and batches.",
+    "temporaryKeys": "Test keys",
+    "temporaryKeysDesc": "View test-key users, batches, and batch download/delete actions.",
+    "subscriptions": "Subscription records",
+    "subscriptionsDesc": "Order-level provisioning records and quota snapshots."
+  },
+  "fields": {
       "planId": "Plan ID",
       "name": "Name",
       "price": "Price",
@@ -826,8 +829,8 @@
       "plan": "Plan",
       "assignedSource": "Source",
       "notes": "Notes"
-    },
-    "columns": {
+  },
+  "columns": {
       "plan": "Plan",
       "price": "Price",
       "validity": "Validity",
@@ -1479,9 +1482,40 @@
         "unknown": "Unknown",
         "healthy": "Healthy",
         "unhealthy": "Unhealthy"
-      }
+    }
+  },
+  "temporaryKeys": {
+    "title": "Test key group",
+    "description": "Test-key users are shown first. Temporary key batches support bulk download and bulk delete.",
+    "fields": {
+      "sourceUserId": "Source user ID",
+      "sourceKeyId": "Source key ID",
+      "count": "Count",
+      "name": "Batch name",
+      "customLimitTotalUsd": "Per-key total limit",
+      "providerGroup": "Group",
+      "keys": "Keys",
+      "actions": "Actions"
     },
-    "endpoint": {
+    "actions": {
+      "createBatch": "Create batch",
+      "download": "Download batch",
+      "delete": "Delete batch",
+      "refresh": "Refresh"
+    },
+    "messages": {
+      "created": "Created {count} test keys",
+      "downloaded": "Batch downloaded",
+      "deleted": "Batch deleted",
+      "noBatches": "No test-key batches yet"
+    },
+    "errors": {
+      "createFailed": "Failed to create test-key batch",
+      "downloadFailed": "Failed to download test-key batch",
+      "deleteFailed": "Failed to delete test-key batch"
+    }
+  },
+  "endpoint": {
       "selectVendor": "Select vendor",
       "selectType": "Select type"
     },
@@ -1779,6 +1813,13 @@
         "confirm": "Yes, Reset All",
         "loading": "Resetting...",
         "success": "All statistics have been reset"
+      },
+      "syncQuota": {
+        "button": "Sync User Quotas to Keys",
+        "loading": "Syncing...",
+        "success": "Synced to {count} keys",
+        "noKeys": "This user has no keys to sync",
+        "error": "Failed to sync user quotas to keys"
       }
     },
     "batchEdit": {

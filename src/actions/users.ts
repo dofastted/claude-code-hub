@@ -21,6 +21,7 @@ import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
+import { Decimal } from "@/lib/utils/currency";
 import {
   createKey,
   findKeyList,
@@ -39,8 +40,78 @@ import {
   updateUser,
   updateUserCostResetMarkers,
 } from "@/repository/user";
+import { updateKey } from "@/repository/key";
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
+
+function normalizeQuotaNumber(value: number | null | undefined): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return Number.isFinite(value) ? value : null;
+}
+
+function roundMoneyShare(value: number | null | undefined, count: number): number | null {
+  if (value === null || value === undefined) return value ?? null;
+  if (!Number.isFinite(value) || value <= 0 || count <= 0) return null;
+
+  const decimal = new Decimal(value).div(count);
+  const share = decimal.toDecimalPlaces(2, Decimal.ROUND_FLOOR);
+  if (share.lte(0)) {
+    return 0.01;
+  }
+  return share.toNumber();
+}
+
+function splitUserQuotaToKeyPayload(user: User, keyCount: number): {
+  limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
+  limit_daily_usd?: number | null;
+  limit_weekly_usd?: number | null;
+  limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
+  limit_concurrent_sessions?: number;
+} {
+  return {
+    limit_5h_usd: roundMoneyShare(normalizeQuotaNumber(user.limit5hUsd), keyCount),
+    limit_5h_reset_mode: user.limit5hResetMode,
+    limit_daily_usd: roundMoneyShare(normalizeQuotaNumber(user.dailyQuota), keyCount),
+    limit_weekly_usd: roundMoneyShare(normalizeQuotaNumber(user.limitWeeklyUsd), keyCount),
+    limit_monthly_usd: roundMoneyShare(normalizeQuotaNumber(user.limitMonthlyUsd), keyCount),
+    limit_total_usd: roundMoneyShare(normalizeQuotaNumber(user.limitTotalUsd), keyCount),
+    limit_concurrent_sessions:
+      typeof user.limitConcurrentSessions === "number"
+        ? Math.max(0, Math.floor(user.limitConcurrentSessions))
+        : 0,
+  };
+}
+
+export async function syncUserQuotaToKeys(userId: number): Promise<number> {
+  const user = await findUserById(userId);
+  if (!user) return 0;
+
+  const keys = await findKeyList(userId);
+  if (keys.length === 0) return 0;
+
+  const payload = splitUserQuotaToKeyPayload(user, keys.length);
+  let updatedCount = 0;
+
+  for (const key of keys) {
+    await updateKey(key.id, {
+      limit_5h_usd: payload.limit_5h_usd,
+      limit_5h_reset_mode: payload.limit_5h_reset_mode,
+      limit_daily_usd: payload.limit_daily_usd,
+      limit_weekly_usd: payload.limit_weekly_usd,
+      limit_monthly_usd: payload.limit_monthly_usd,
+      limit_total_usd: payload.limit_total_usd,
+      limit_concurrent_sessions: payload.limit_concurrent_sessions,
+    });
+    updatedCount += 1;
+  }
+
+  revalidatePath("/dashboard/users");
+  revalidatePath("/dashboard");
+  return updatedCount;
+}
 
 /**
  * 批量获取用户列表的查询参数（用于用户管理列表页）。

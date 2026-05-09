@@ -49,6 +49,8 @@ CCH 原始 API 使用 `Authorization: Bearer <purpose-token>`。
 - `GET /api/portal/subscriptions/:id` 使用 `FKCODEX_PORTAL_SUBSCRIPTION_READ_TOKEN`
 - `POST /api/portal/subscriptions/provision` 使用 `FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
 - `PATCH /api/portal/subscriptions/:id/revoke` 使用 `FKCODEX_PORTAL_SUBSCRIPTION_WRITE_TOKEN`
+- `GET/POST/PATCH /api/portal/users` 和 `/api/portal/users/:id/keys` 使用 `PORTAL_MANAGEMENT_TOKEN`
+- `POST/GET/DELETE /api/portal/temporary-key-batches` 使用 `PORTAL_MANAGEMENT_TOKEN`
 
 fk-web-glm 代理 API：
 
@@ -231,6 +233,20 @@ fk-web-glm 代理 API：
   "errorCode": "PLAN_NOT_AVAILABLE"
 }
 ```
+
+### 管理用户、Key 和临时 Key 批次
+
+管理 API 使用 `PORTAL_MANAGEMENT_TOKEN`。它只允许操作 `PORTAL_PROVIDER_GROUP` 和 `PORTAL_TEST_KEY_GROUP` 两类分组。
+
+- `GET /api/portal/users` 返回这两类分组下的 CCH 用户。
+- `POST /api/portal/users` 创建 CCH 用户。`providerGroup` 可选，默认 `PORTAL_PROVIDER_GROUP`；传 `PORTAL_TEST_KEY_GROUP` 时可创建长期存在的临时 key 用户。
+- `PATCH /api/portal/users/:id` 更新用户设置。`providerGroup` 只能改成 `PORTAL_PROVIDER_GROUP` 或 `PORTAL_TEST_KEY_GROUP`。
+- `GET /api/portal/users/:id/keys` 返回该用户在上述两类分组下的 key。
+- `POST /api/portal/users/:id/keys` 创建 key。`providerGroup` 可选，默认继承用户分组；可传 `PORTAL_TEST_KEY_GROUP` 创建测试 key 模板。
+- `PATCH /api/portal/users/:id/keys/:keyId` 更新 key 设置。`providerGroup` 只能改成 `PORTAL_PROVIDER_GROUP` 或 `PORTAL_TEST_KEY_GROUP`。
+- `POST /api/portal/temporary-key-batches` 按 `sourceUserId` 和 `sourceKeyId` 批量创建测试 key，默认写入 `PORTAL_TEST_KEY_GROUP`，支持 `customLimitTotalUsd` 生成 1、3、5、10 美元等小额度 key。
+- `GET /api/portal/temporary-key-batches/:batchId/download?providerGroup=<group>` 返回该批次完整 key，只给可信服务端下载，日志和页面不得打印完整 key。
+- `DELETE /api/portal/temporary-key-batches/:batchId?providerGroup=<group>` 批量销毁该批次 key，并保留源用户。临时 key 用户可以长期存在，销毁批次不会因为这是用户最后一个 key 而失败。
 
 ### `PATCH /api/portal/subscriptions/:id/revoke`
 

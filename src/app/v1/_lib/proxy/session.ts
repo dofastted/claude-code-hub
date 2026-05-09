@@ -11,7 +11,7 @@ import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
-import type { ModelPriceData } from "@/types/model-price";
+import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
@@ -925,23 +925,23 @@ export class ProxySession {
     const primaryModel = useOriginal ? originalModel : redirectedModel;
     const fallbackModel = useOriginal ? redirectedModel : originalModel;
 
-    const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
+    const primaryRecordMatch = await findLatestBillingPriceRecord(primaryModel);
     let resolved = resolvePricingForModelRecords({
       provider: providerIdentity,
-      primaryModelName: primaryModel,
+      primaryModelName: primaryRecordMatch?.lookupModelName ?? primaryModel,
       fallbackModelName: null,
-      primaryRecord,
+      primaryRecord: primaryRecordMatch?.record ?? null,
       fallbackRecord: null,
     });
 
     if (!resolved && fallbackModel && fallbackModel !== primaryModel) {
-      const fallbackRecord = await findLatestPriceByModel(fallbackModel);
+      const fallbackRecordMatch = await findLatestBillingPriceRecord(fallbackModel);
       resolved = resolvePricingForModelRecords({
         provider: providerIdentity,
-        primaryModelName: primaryModel,
-        fallbackModelName: fallbackModel,
-        primaryRecord,
-        fallbackRecord,
+        primaryModelName: primaryRecordMatch?.lookupModelName ?? primaryModel,
+        fallbackModelName: fallbackRecordMatch?.lookupModelName ?? fallbackModel,
+        primaryRecord: primaryRecordMatch?.record ?? null,
+        fallbackRecord: fallbackRecordMatch?.record ?? null,
       });
     }
 
@@ -973,6 +973,14 @@ export class ProxySession {
     }
 
     return this.cachedCodexPriorityBillingSource ?? "requested";
+  }
+
+  async getBillingModelSource(): Promise<BillingModelSource> {
+    if (this.cachedBillingModelSource === undefined) {
+      await this.loadBillingSettings();
+    }
+
+    return this.cachedBillingModelSource ?? "redirected";
   }
 
   private async loadBillingSettings(): Promise<void> {
@@ -1062,6 +1070,46 @@ function formatHeadersForLog(headers: Headers): string {
   });
 
   return collected.length > 0 ? collected.join("\n") : "(empty)";
+}
+
+interface BillingPriceRecordMatch {
+  lookupModelName: string;
+  record: ModelPrice;
+}
+
+function getBillingModelLookupCandidates(modelName: string | null | undefined): string[] {
+  const normalizedModelName = modelName?.trim();
+  if (!normalizedModelName) {
+    return [];
+  }
+
+  const candidates = [normalizedModelName];
+  if (!normalizedModelName.toLowerCase().startsWith("gpt-")) {
+    return candidates;
+  }
+
+  const canonicalModelName = normalizedModelName.replace(/\([^()]+\)\s*$/, "").trim();
+  if (canonicalModelName && canonicalModelName !== normalizedModelName) {
+    candidates.push(canonicalModelName);
+  }
+
+  return candidates;
+}
+
+async function findLatestBillingPriceRecord(
+  modelName: string | null | undefined
+): Promise<BillingPriceRecordMatch | null> {
+  for (const candidate of getBillingModelLookupCandidates(modelName)) {
+    const record = await findLatestPriceByModel(candidate);
+    if (record) {
+      return {
+        lookupModelName: candidate,
+        record,
+      };
+    }
+  }
+
+  return null;
 }
 
 function optimizeRequestMessage(message: Record<string, unknown>): Record<string, unknown> {

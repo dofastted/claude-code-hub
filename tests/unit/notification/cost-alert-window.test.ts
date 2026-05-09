@@ -24,6 +24,7 @@ const mockSumKeyCostInTimeRange = vi.fn();
 const mockSumProviderCostInTimeRange = vi.fn();
 const mockDbSelect = vi.fn();
 const mockDbFrom = vi.fn();
+const mockDbInnerJoin = vi.fn();
 const mockDbWhere = vi.fn();
 
 // Mock dependencies before importing the module under test
@@ -31,12 +32,17 @@ vi.mock("@/drizzle/db", () => ({
   db: {
     select: (...args: unknown[]) => {
       mockDbSelect(...args);
+      const chain = {
+        innerJoin: (...innerJoinArgs: unknown[]) => {
+          mockDbInnerJoin(...innerJoinArgs);
+          return chain;
+        },
+        where: (...whereArgs: unknown[]) => mockDbWhere(...whereArgs),
+      };
       return {
         from: (...fromArgs: unknown[]) => {
           mockDbFrom(...fromArgs);
-          return {
-            where: (...whereArgs: unknown[]) => mockDbWhere(...whereArgs),
-          };
+          return chain;
         },
       };
     },
@@ -123,6 +129,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: "10.00",
           limitWeek: null,
@@ -143,6 +150,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: null,
           limitWeek: "100.00",
@@ -163,6 +171,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: null,
           limitWeek: null,
@@ -185,6 +194,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: "10.00",
           limitWeek: null,
@@ -209,6 +219,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: "10.00",
           limitWeek: null,
@@ -224,7 +235,7 @@ describe("Cost Alert Time Windows", () => {
       expect(alerts[0]).toMatchObject({
         targetType: "user",
         targetName: "Test User",
-        targetId: 1,
+        targetId: 10,
         currentCost: 9,
         quotaLimit: 10,
         threshold: 0.8,
@@ -232,11 +243,38 @@ describe("Cost Alert Time Windows", () => {
       });
     });
 
+    it("should use the owning user name instead of the key name in user alerts", async () => {
+      mockDbWhere.mockResolvedValue([
+        {
+          id: 1,
+          key: "sk-hidden",
+          userId: 10,
+          userName: "Real User Name",
+          limit5h: "10.00",
+          limitWeek: null,
+          limitMonth: null,
+        },
+      ]);
+      mockSumKeyCostInTimeRange.mockResolvedValue(9);
+
+      const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
+      const alerts = await generateCostAlerts(0.8);
+
+      expect(mockDbInnerJoin).toHaveBeenCalled();
+      expect(alerts[0]).toMatchObject({
+        targetType: "user",
+        targetName: "Real User Name",
+        targetId: 10,
+      });
+      expect(alerts[0]?.targetName).not.toBe("sk-hidden");
+    });
+
     it("should NOT generate alert when cost is below threshold", async () => {
       mockDbWhere.mockResolvedValue([
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: "10.00",
           limitWeek: null,
@@ -337,6 +375,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: null,
           limitWeek: "100.00",
@@ -367,6 +406,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: null,
           limitWeek: null,
@@ -397,6 +437,7 @@ describe("Cost Alert Time Windows", () => {
         {
           id: 1,
           key: "test-key",
+          userId: 10,
           userName: "Test User",
           limit5h: "10.00",
           limitWeek: null,
@@ -465,6 +506,7 @@ describe("Cost Alert Time Windows", () => {
           {
             id: 1,
             key: "key-1",
+            userId: 10,
             userName: "User 1",
             limit5h: "10.00",
             limitWeek: null,
@@ -473,6 +515,7 @@ describe("Cost Alert Time Windows", () => {
           {
             id: 2,
             key: "key-2",
+            userId: 20,
             userName: "User 2",
             limit5h: null,
             limitWeek: "100.00",
@@ -481,6 +524,7 @@ describe("Cost Alert Time Windows", () => {
           {
             id: 3,
             key: "key-3",
+            userId: 30,
             userName: "User 3",
             limit5h: null,
             limitWeek: null,
@@ -511,6 +555,7 @@ describe("Cost Alert Time Windows", () => {
       const manyKeys = Array.from({ length: 10 }, (_, i) => ({
         id: i + 1,
         key: `key-${i + 1}`,
+        userId: i + 100,
         userName: `User ${i + 1}`,
         limit5h: "10.00",
         limitWeek: "100.00",

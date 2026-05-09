@@ -20,9 +20,12 @@ EXPOSE 3000
 
 # 关键：确保复制了所有必要的文件，特别是 drizzle 文件夹
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/messages ./messages
 COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/server ./.next/server
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/VERSION ./VERSION
 
 CMD ["node", "server.js"]

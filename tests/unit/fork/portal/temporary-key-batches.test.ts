@@ -10,6 +10,8 @@ import {
 } from "@/fork/portal/repository/user-group-configs";
 import { findUserById } from "@/repository/user";
 import { findTemporaryKeyBatchWithKeys } from "@/fork/portal/repository/temporary-key-batches";
+import { deleteKey, findKeyList } from "@/repository/key";
+import { syncUserProviderGroupFromKeysForSystem } from "@/fork/portal/user-groups/sync";
 
 vi.mock("@/fork/portal/config", () => ({
   getPortalConfig: () => ({
@@ -100,5 +102,55 @@ describe("temporary key batches", () => {
     expect(ensureProviderGroupsExist).toHaveBeenCalledWith(["portal-custom"]);
     expect(findUserGroupConfigByName).toHaveBeenCalledWith("portal-custom");
     expect(findTemporaryKeyBatchWithKeys).toHaveBeenCalledWith(1);
+  });
+
+  it("deletes a temporary batch even when it contains the source user's last active key", async () => {
+    vi.mocked(findTemporaryKeyBatchWithKeys).mockResolvedValueOnce({
+      id: 9,
+      providerGroup: "temp-custom",
+      name: "one-off-test",
+      sourceUserId: 7,
+      sourceKeyId: 70,
+      createdCount: 1,
+      createdByUserId: null,
+      deletedAt: null,
+      createdAt: new Date("2026-04-28T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-28T00:00:00.000Z"),
+      keys: [
+        {
+          id: 70,
+          userId: 7,
+          name: "temporary-001",
+          key: "sk-temp",
+          isEnabled: true,
+          canLoginWebUi: false,
+          limit5hUsd: null,
+          limit5hResetMode: "rolling",
+          limitDailyUsd: null,
+          dailyResetMode: "fixed",
+          dailyResetTime: "00:00",
+          limitWeeklyUsd: null,
+          limitMonthlyUsd: null,
+          limitTotalUsd: 3,
+          limitConcurrentSessions: 0,
+          providerGroup: "temp-custom",
+          cacheTtlPreference: null,
+          createdAt: new Date("2026-04-28T00:00:00.000Z"),
+          updatedAt: new Date("2026-04-28T00:00:00.000Z"),
+        },
+      ],
+    });
+    vi.mocked(findKeyList).mockResolvedValueOnce([]);
+
+    const result = await deleteTemporaryKeyBatch({ batchId: 9, providerGroup: "temp-custom" });
+
+    expect(result).toEqual({
+      batchId: 9,
+      deletedKeyIds: [70],
+      affectedUserIds: [7],
+    });
+    expect(deleteKey).toHaveBeenCalledWith(70);
+    expect(syncUserProviderGroupFromKeysForSystem).toHaveBeenCalledWith(7);
+    expect(findKeyList).not.toHaveBeenCalled();
   });
 });

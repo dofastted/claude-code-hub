@@ -106,6 +106,7 @@ describe("PublicStatusPage locale handling", () => {
 
     const element = await mod.default({
       params: Promise.resolve({ locale: "en" }),
+      searchParams: Promise.resolve({}),
     });
 
     expect(mockGetTranslations).toHaveBeenCalledWith({
@@ -128,6 +129,20 @@ describe("PublicStatusPage locale handling", () => {
         heroSecondary: "Public API status overview.",
         fresh: "Fresh",
       },
+    });
+  });
+
+  it("passes development mock opt-in to the page loader and client view", async () => {
+    const mod = await import("@/app/[locale]/status/page");
+
+    const element = await mod.default({
+      params: Promise.resolve({ locale: "en" }),
+      searchParams: Promise.resolve({ mock: "1" }),
+    });
+
+    expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({ mock: "1" });
+    expect((element as { props: { mock: boolean } }).props).toMatchObject({
+      mock: true,
     });
   });
 
@@ -165,9 +180,13 @@ describe("PublicStatusPage locale handling", () => {
 
     const element = await mod.default({
       params: Promise.resolve({ locale: "en", slug: "anthropic" }),
+      searchParams: Promise.resolve({}),
     });
 
-    expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({ groupSlug: "anthropic" });
+    expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({
+      groupSlug: "anthropic",
+      mock: undefined,
+    });
     expect((element as { props: { filterSlug: string } }).props).toMatchObject({
       filterSlug: "anthropic",
     });

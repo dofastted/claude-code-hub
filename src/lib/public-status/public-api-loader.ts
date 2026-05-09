@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { isPublicStatusDevMockSearchParamValue } from "@/lib/public-status/dev-mock";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import {
   type PublicStatusRouteResponse,
@@ -66,9 +67,22 @@ const loadRootStatusResponse = cache(async () => {
   return await readPublicStatusRoute(new URLSearchParams());
 });
 
+const loadMockRootStatusResponse = cache(async () => {
+  const params = new URLSearchParams();
+  params.set("mock", "1");
+  return await readPublicStatusRoute(params);
+});
+
 const loadGroupStatusResponse = cache(async (groupSlug: string) => {
   const params = new URLSearchParams();
   params.set("groupSlug", groupSlug);
+  return await readPublicStatusRoute(params);
+});
+
+const loadMockGroupStatusResponse = cache(async (groupSlug: string) => {
+  const params = new URLSearchParams();
+  params.set("groupSlug", groupSlug);
+  params.set("mock", "1");
   return await readPublicStatusRoute(params);
 });
 
@@ -78,10 +92,16 @@ const loadPublicSiteMetaResponse = cache(async () => {
 
 export async function loadPublicStatusPageData(input?: {
   groupSlug?: string;
+  mock?: string | string[];
 }): Promise<LoadedPublicStatusPageData> {
+  const useMock = isPublicStatusDevMockSearchParamValue(input?.mock);
   const response = input?.groupSlug
-    ? await loadGroupStatusResponse(input.groupSlug)
-    : await loadRootStatusResponse();
+    ? useMock
+      ? await loadMockGroupStatusResponse(input.groupSlug)
+      : await loadGroupStatusResponse(input.groupSlug)
+    : useMock
+      ? await loadMockRootStatusResponse()
+      : await loadRootStatusResponse();
   const initialPayload = toPublicStatusPayload(response);
 
   return {

@@ -12,6 +12,7 @@ import {
   removeUser,
   resetUserAllStatistics,
   resetUserLimitsOnly,
+  syncUserQuotaToKeys,
   toggleUserEnabled,
 } from "@/actions/users";
 import {
@@ -100,6 +101,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [reset5hDialogOpen, setReset5hDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
   const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
+  const [isSyncingQuota, setIsSyncingQuota] = useState(false);
 
   // Always show providerGroup field in edit mode
   const userEditTranslations = useUserTranslations({ showProviderGroup: true });
@@ -300,6 +302,27 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     }
   };
 
+  const handleSyncUserQuotaToKeys = async () => {
+    setIsSyncingQuota(true);
+    try {
+      const updatedCount = await syncUserQuotaToKeys(user.id);
+      toast.success(
+        updatedCount > 0
+          ? t("editDialog.syncQuota.success", { count: updatedCount })
+          : t("editDialog.syncQuota.noKeys")
+      );
+      onSuccess?.();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+      router.refresh();
+    } catch (error) {
+      console.error("[EditUserDialog] sync user quota to keys failed", error);
+      toast.error(t("editDialog.syncQuota.error"));
+    } finally {
+      setIsSyncingQuota(false);
+    }
+  };
+
   const canReset5h = (user.limit5hUsd ?? null) !== null && (user.limit5hUsd ?? 0) > 0;
   const reset5hMode = user.limit5hResetMode ?? "rolling";
 
@@ -475,6 +498,23 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-slate-500/50 text-slate-700 hover:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-slate-500/10"
+                    onClick={handleSyncUserQuotaToKeys}
+                    disabled={isSyncingQuota}
+                  >
+                    {isSyncingQuota ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {t("editDialog.syncQuota.loading")}
+                      </>
+                    ) : (
+                      t("editDialog.syncQuota.button")
+                    )}
+                  </Button>
                 </div>
               </div>
             </div>

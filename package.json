@@ -28,6 +28,7 @@
     "test:coverage:usage-logs-sessionid-search": "vitest run --config tests/configs/usage-logs-sessionid-search.config.ts --coverage",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
     "portal:mock-data": "node scripts/fork/portal-local-mock-data.mjs",
+    "portal:key-sync": "node scripts/fork/sync-portal-key-groups.mjs",
     "provider:local-cch-test": "node scripts/fork/configure-local-cch-test-provider.mjs",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
     "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",

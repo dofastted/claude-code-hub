@@ -182,7 +182,8 @@ export async function findTemporaryKeyBatchesByGroup(
   const rows = await db
     .select()
     .from(temporaryKeyBatches)
-    .where(eq(temporaryKeyBatches.providerGroup, providerGroup));
+    .where(eq(temporaryKeyBatches.providerGroup, providerGroup))
+    .orderBy(temporaryKeyBatches.createdAt, temporaryKeyBatches.id);
 
   return rows.map(toTemporaryKeyBatch);
 }

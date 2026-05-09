@@ -1,24 +1,27 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { isPublicStatusDevMockSearchParamValue } from "@/lib/public-status/dev-mock";
 import { loadPublicStatusPageData } from "@/lib/public-status/public-api-loader";
 import { PublicStatusView } from "../_components/public-status-view";
 
 export const dynamic = "force-dynamic";
 
-async function loadGroupContext(slug: string) {
-  const loaded = await loadPublicStatusPageData({ groupSlug: slug });
+async function loadGroupContext(slug: string, mock?: string | string[]) {
+  const loaded = await loadPublicStatusPageData({ groupSlug: slug, mock });
   const targetGroup = loaded.initialPayload.groups.find((group) => group.publicGroupSlug === slug);
   return { ...loaded, targetGroup };
 }
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ mock?: string | string[] }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { siteTitle, targetGroup } = await loadGroupContext(slug);
+  const { siteTitle, targetGroup } = await loadGroupContext(slug, (await searchParams)?.mock);
   if (!targetGroup) {
     return { title: siteTitle };
   }
@@ -30,10 +33,13 @@ export async function generateMetadata({
 
 export default async function PublicStatusGroupPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; slug: string }>;
+  searchParams?: Promise<{ mock?: string | string[] }>;
 }) {
   const { locale, slug } = await params;
+  const mock = isPublicStatusDevMockSearchParamValue((await searchParams)?.mock);
   const t = await getTranslations({ locale, namespace: "settings" });
   const {
     followServerDefaults,
@@ -44,7 +50,7 @@ export default async function PublicStatusGroupPage({
     status,
     timeZone,
     targetGroup,
-  } = await loadGroupContext(slug);
+  } = await loadGroupContext(slug, mock ? "1" : undefined);
   if (!targetGroup) {
     notFound();
   }
@@ -60,6 +66,7 @@ export default async function PublicStatusGroupPage({
       filterSlug={slug}
       initialStatus={status}
       locale={locale}
+      mock={mock}
       siteTitle={siteTitle}
       timeZone={timeZone}
       labels={{

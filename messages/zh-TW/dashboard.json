@@ -781,6 +781,7 @@
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
     "providers": "供應商管理",
+    "systemStatus": "狀態頁",
     "auditLogs": "稽核日誌",
     "documentation": "文件",
     "systemSettings": "系統設定",
@@ -790,7 +791,7 @@
   },
   "portal": {
     "title": "門戶訂閱",
-    "description": "管理門戶套餐、使用者映射和訂閱記錄。",
+    "description": "管理門戶套餐、使用者映射、測試 key 和訂閱記錄。",
     "sections": {
       "planForm": "套餐範本",
       "planFormDesc": "在 CCH 中建立或更新門戶套餐範本。",
@@ -799,7 +800,9 @@
       "provision": "開通訂閱",
       "provisionDesc": "為門戶訂單建立或複用 CCH 使用者和預設 key。",
       "users": "門戶使用者池",
-      "usersDesc": "門戶使用者與 CCH 使用者之間的固定映射。",
+      "usersDesc": "門戶使用者與 CCH 使用者之間的固定映射，也包含測試 key 使用者和批次。",
+      "temporaryKeys": "測試 key",
+      "temporaryKeysDesc": "查看測試 key 使用者、批次和臨時 key 下載/銷毀。",
       "subscriptions": "訂閱記錄",
       "subscriptionsDesc": "按訂單保存的開通結果和額度快照。"
     },
@@ -1484,6 +1487,37 @@
       "refreshFailed": "重新整理失敗，請重試"
     }
   },
+  "temporaryKeys": {
+    "title": "測試 key 分組",
+    "description": "測試 key 使用者會置頂顯示，臨時 key 批次支援批量下載和批量銷毀。",
+    "fields": {
+      "sourceUserId": "來源使用者 ID",
+      "sourceKeyId": "來源 Key ID",
+      "count": "建立數量",
+      "name": "批次名稱",
+      "customLimitTotalUsd": "單 key 總額度",
+      "providerGroup": "分組",
+      "keys": "Keys",
+      "actions": "操作"
+    },
+    "actions": {
+      "createBatch": "建立批次",
+      "download": "下載批次",
+      "delete": "銷毀批次",
+      "refresh": "重新整理"
+    },
+    "messages": {
+      "created": "已建立 {count} 個測試 key",
+      "downloaded": "已下載批次",
+      "deleted": "已銷毀批次",
+      "noBatches": "暫無測試 key 批次"
+    },
+    "errors": {
+      "createFailed": "建立測試 key 批次失敗",
+      "downloadFailed": "下載測試 key 批次失敗",
+      "deleteFailed": "銷毀測試 key 批次失敗"
+    }
+  },
   "rateLimits": {
     "title": "限流事件統計",
     "description": "查看與分析限流事件的統計資料",
@@ -1765,6 +1799,13 @@
         "confirm": "是的，重設全部",
         "loading": "重設中...",
         "success": "所有統計已重置"
+      },
+      "syncQuota": {
+        "button": "同步使用者額度到 Key",
+        "loading": "同步中...",
+        "success": "已同步到 {count} 個 Key",
+        "noKeys": "該使用者下暫無可同步的 Key",
+        "error": "同步使用者額度到 Key 失敗"
       }
     },
     "batchEdit": {
