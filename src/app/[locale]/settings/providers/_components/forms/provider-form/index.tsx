@@ -4,15 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  addProvider,
-  editProvider,
-  removeProvider,
-  undoProviderDelete,
-  undoProviderPatch,
-} from "@/actions/providers";
-import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +16,15 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { getProviderEndpoints } from "@/lib/api-client/v1/actions/provider-endpoints";
+import {
+  addProvider,
+  editProvider,
+  removeProvider,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/lib/api-client/v1/actions/providers";
+import { getDistinctProviderGroupsAction } from "@/lib/api-client/v1/actions/request-filters";
 import {
   type CustomHeadersValidationErrorCode,
   parseCustomHeadersJsonText,
@@ -371,7 +371,7 @@ function ProviderFormContent({
           limit_weekly_usd: state.rateLimit.limitWeeklyUsd,
           limit_monthly_usd: state.rateLimit.limitMonthlyUsd,
           limit_total_usd: state.rateLimit.limitTotalUsd,
-          limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions,
+          limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions ?? undefined,
           circuit_breaker_failure_threshold: state.circuitBreaker.failureThreshold,
           circuit_breaker_open_duration: openDurationMs,
           circuit_breaker_half_open_success_threshold:
@@ -385,10 +385,6 @@ function ProviderFormContent({
           request_timeout_non_streaming_ms: nonStreamingTimeoutMs,
           mcp_passthrough_type: state.mcp.mcpPassthroughType,
           mcp_passthrough_url: state.mcp.mcpPassthroughUrl?.trim() || null,
-          tpm: null,
-          rpm: null,
-          rpd: null,
-          cc: null,
         };
 
         if (isEdit && provider) {

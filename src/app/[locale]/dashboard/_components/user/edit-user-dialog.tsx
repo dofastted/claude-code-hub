@@ -8,14 +8,6 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
-  editUser,
-  removeUser,
-  resetUserAllStatistics,
-  resetUserLimitsOnly,
-  syncUserQuotaToKeys,
-  toggleUserEnabled,
-} from "@/actions/users";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -35,6 +27,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  editUser,
+  removeUser,
+  resetUserAllStatistics,
+  resetUserLimitsOnly,
+  syncUserQuotaToKeys,
+  toggleUserEnabled,
+} from "@/lib/api-client/v1/actions/users";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { cn } from "@/lib/utils";
 import { UpdateUserSchema } from "@/lib/validation/schemas";

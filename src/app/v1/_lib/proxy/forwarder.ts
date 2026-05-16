@@ -1,5 +1,6 @@
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
+import { pipeline as streamPipeline } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { request as undiciRequest } from "undici";
@@ -49,7 +50,11 @@ import type {
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
-import { evaluateResponsesWsEligibility } from "../responses-ws/eligibility";
+import {
+  evaluateResponsesWsEligibility,
+  getResponsesWsSessionId,
+} from "../responses-ws/eligibility";
+import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import { markResponsesWsUnsupported } from "../responses-ws/unsupported-cache";
 import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter";
 import { buildProxyUrl } from "../url";
@@ -74,6 +79,8 @@ import {
   sanitizeUrl,
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
+import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
 import {
   cloneOpenAIImageRequestMetadata,
   sanitizeGenerationsRequestForProvider,
@@ -81,7 +88,6 @@ import {
   syncOpenAIImageMultipartFromLogicalBody,
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
-import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -129,7 +135,21 @@ function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unk
   }
 }
 
-const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = [
+  "content-length",
+  "connection",
+  "transfer-encoding",
+  ...RESERVED_INTERNAL_HEADERS,
+];
+
+// Reserved names that must never be written into `overrides` from provider custom headers.
+// HeaderProcessor.process() applies overrides AFTER the blacklist filter, so any name landing in
+// overrides bypasses the transport-layer blacklist. Without this guard a dirty provider record
+// could rewrite the upstream Host (sending credentials to an attacker-chosen target) or inject
+// hop-by-hop headers that break request framing.
+const PROVIDER_CUSTOM_HEADER_RESERVED_NAMES: ReadonlySet<string> = new Set(
+  ["host", ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST].map((n) => n.toLowerCase())
+);
 
 // 把 provider 上配置的静态自定义请求头合并到 overrides 中。
 // 入参 overrides 直接被原地修改。鉴权头（authorization / x-api-key / x-goog-api-key）会在调用方
@@ -141,7 +161,9 @@ function applyProviderCustomHeaders(
   if (!customHeaders) return;
   for (const [name, value] of Object.entries(customHeaders)) {
     if (typeof value !== "string") continue;
-    if (PROTECTED_AUTH_HEADER_NAMES.has(name.toLowerCase())) continue;
+    const lower = name.toLowerCase();
+    if (PROTECTED_AUTH_HEADER_NAMES.has(lower)) continue;
+    if (PROVIDER_CUSTOM_HEADER_RESERVED_NAMES.has(lower)) continue;
     overrides[name] = value;
   }
 }
@@ -314,47 +336,77 @@ function resolveCacheTtlPreference(
   return normalize(keyPref) ?? normalize(providerPref) ?? null;
 }
 
-function applyCacheTtlOverrideToMessage(
+function applyTtlToContentBlocks(
+  blocks: unknown[],
+  ttl: CacheTtlResolved
+): { blocks: unknown[]; applied: boolean } {
+  let applied = false;
+  const next = blocks.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const itemObj = item as Record<string, unknown>;
+    const cacheControl = itemObj.cache_control;
+    if (!cacheControl || typeof cacheControl !== "object") return item;
+    const ccObj = cacheControl as Record<string, unknown>;
+    if (ccObj.type !== "ephemeral") return item;
+    applied = true;
+    return {
+      ...itemObj,
+      cache_control: {
+        ...ccObj,
+        ttl: ttl === "1h" ? "1h" : "5m",
+      },
+    };
+  });
+  return { blocks: next, applied };
+}
+
+export function applyCacheTtlOverrideToMessage(
   message: Record<string, unknown>,
   ttl: CacheTtlResolved
 ): boolean {
   let applied = false;
-  const messages = (message as Record<string, unknown>).messages;
 
-  if (!Array.isArray(messages)) {
-    return applied;
+  // 顶层 system 字段:可能是 string(忽略)或内容块数组
+  // 仅在确有命中时回写,避免 .map() 额外分配的新数组替换原引用
+  const system = message.system;
+  if (Array.isArray(system)) {
+    const result = applyTtlToContentBlocks(system, ttl);
+    if (result.applied) {
+      message.system = result.blocks;
+      applied = true;
+    }
   }
 
-  for (const msg of messages) {
-    if (!msg || typeof msg !== "object") continue;
-    const msgObj = msg as Record<string, unknown>;
-    const content = msgObj.content;
-
-    if (!Array.isArray(content)) continue;
-
-    msgObj.content = content.map((item) => {
-      if (!item || typeof item !== "object") return item;
-      const itemObj = item as Record<string, unknown>;
-      const cacheControl = itemObj.cache_control;
-
-      if (cacheControl && typeof cacheControl === "object") {
-        const ccObj = cacheControl as Record<string, unknown>;
-        if (ccObj.type === "ephemeral") {
-          applied = true;
-          return {
-            ...itemObj,
-            cache_control: {
-              ...ccObj,
-              ttl: ttl === "1h" ? "1h" : "5m",
-            },
-          };
-        }
+  // messages[].content[]
+  const messages = message.messages;
+  if (Array.isArray(messages)) {
+    for (const msg of messages) {
+      if (!msg || typeof msg !== "object") continue;
+      const msgObj = msg as Record<string, unknown>;
+      const content = msgObj.content;
+      if (!Array.isArray(content)) continue;
+      const result = applyTtlToContentBlocks(content, ttl);
+      if (result.applied) {
+        msgObj.content = result.blocks;
+        applied = true;
       }
-      return item;
-    });
+    }
   }
 
   return applied;
+}
+
+export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefined): string {
+  const betaFlags = new Set(
+    (existing ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  betaFlags.add("extended-cache-ttl-2025-04-11");
+  // extended-cache-ttl 依赖 prompt-caching；无条件补齐避免客户端只带其它 beta 时漏掉依赖
+  betaFlags.add("prompt-caching-2024-07-31");
+  return Array.from(betaFlags).join(", ");
 }
 
 function clampRetryAttempts(value: number): number {
@@ -2652,11 +2704,7 @@ export class ProxyForwarder {
             sanitizeGenerationsRequestForProvider(messageToSend, provider);
           }
 
-          ensureOpenAIChatStreamUsageOption(
-            messageToSend,
-            provider.providerType,
-            requestPath
-          );
+          ensureOpenAIChatStreamUsageOption(messageToSend, provider.providerType, requestPath);
 
           const validation = await validateOpenAIImageRequest({
             pathname: requestPath,
@@ -2848,7 +2896,7 @@ export class ProxyForwarder {
       const responsesWsEndpointId = endpointAudit?.endpointId ?? null;
       try {
         const wsEligibility = await evaluateResponsesWsEligibility({
-          headers: processedHeaders,
+          headers: session.headers,
           provider,
           endpointId: responsesWsEndpointId,
         });
@@ -2867,6 +2915,8 @@ export class ProxyForwarder {
               upstreamUrl: proxyUrl,
               upstreamHeaders: processedHeaders,
               body: requestBodyJson,
+              sessionId: getResponsesWsSessionId(session.headers),
+              endpointId: responsesWsEndpointId,
               abortSignal: combinedSignal,
             });
 
@@ -2987,17 +3037,41 @@ export class ProxyForwarder {
 
       // ⭐ SSL 证书错误检测：标记 Agent 为不健康，下次请求将创建新 Agent
       const sslErrorCacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-      if (isSSLCertificateError(err) && sslErrorCacheKey) {
-        const pool = getGlobalAgentPool();
-        pool.markUnhealthy(sslErrorCacheKey, err.message);
-        logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
-          providerId: provider.id,
-          providerName: provider.name,
-          cacheKey: sslErrorCacheKey,
-          connectionType: proxyConfig ? "proxy" : "direct",
-          errorMessage: err.message,
-          errorCode: err.code,
-        });
+      const sslErrorDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+      if (isSSLCertificateError(err)) {
+        if (sslErrorCacheKey && sslErrorDispatcherId) {
+          const pool = getGlobalAgentPool();
+          pool.markUnhealthy(sslErrorCacheKey, err.message, sslErrorDispatcherId);
+          logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheKey: sslErrorCacheKey,
+            dispatcherId: sslErrorDispatcherId,
+            connectionType: proxyConfig ? "proxy" : "direct",
+            errorMessage: err.message,
+            errorCode: err.code,
+          });
+        } else if (sslErrorCacheKey) {
+          logger.warn(
+            "ProxyForwarder: SSL certificate error detected but dispatcherId is missing",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+              cacheKey: sslErrorCacheKey,
+              connectionType: proxyConfig ? "proxy" : "direct",
+              errorMessage: err.message,
+              errorCode: err.code,
+            }
+          );
+        } else {
+          logger.warn("ProxyForwarder: SSL certificate error detected without pooled agent", {
+            providerId: provider.id,
+            providerName: provider.name,
+            connectionType: proxyConfig ? "proxy" : "direct",
+            errorMessage: err.message,
+            errorCode: err.code,
+          });
+        }
       }
 
       // ⭐ 超时错误检测（优先级：response > client）
@@ -3117,9 +3191,13 @@ export class ProxyForwarder {
       // 场景：HTTP/2 连接失败（GOAWAY、RST_STREAM、PROTOCOL_ERROR 等）
       // 策略：透明回退到 HTTP/1.1，不触发供应商切换或熔断器
       if (enableHttp2 && isHttp2Error(err)) {
+        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
         logger.warn("ProxyForwarder: HTTP/2 protocol error detected, falling back to HTTP/1.1", {
           providerId: provider.id,
           providerName: provider.name,
+          cacheKey: http2CacheKey,
+          dispatcherId: http2DispatcherId,
           errorName: err.name,
           errorMessage: err.message || "(empty message)",
           errorCode: err.code || "N/A",
@@ -3150,15 +3228,31 @@ export class ProxyForwarder {
         delete http1FallbackInit.dispatcher;
 
         // ⭐ 标记 HTTP/2 Agent 为不健康，避免后续请求重复失败
-        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-        if (http2CacheKey) {
+        if (http2CacheKey && http2DispatcherId) {
           const pool = getGlobalAgentPool();
-          pool.markUnhealthy(http2CacheKey, `HTTP/2 protocol error: ${err.message}`);
+          pool.markUnhealthy(
+            http2CacheKey,
+            `HTTP/2 protocol error: ${err.message}`,
+            http2DispatcherId
+          );
           logger.debug("ProxyForwarder: Marked HTTP/2 agent as unhealthy due to protocol error", {
             providerId: provider.id,
             providerName: provider.name,
             cacheKey: http2CacheKey,
+            dispatcherId: http2DispatcherId,
           });
+        } else if (http2CacheKey) {
+          logger.warn(
+            "ProxyForwarder: HTTP/2 protocol error detected but dispatcherId is missing",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+              cacheKey: http2CacheKey,
+              connectionType: proxyConfig ? "proxy" : "direct",
+              errorMessage: err.message || "(empty message)",
+              errorCode: err.code || "N/A",
+            }
+          );
         }
 
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
@@ -4633,19 +4727,9 @@ export class ProxyForwarder {
 
     // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
     if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
-      const existingBeta = session.headers.get("anthropic-beta") || "";
-      const betaFlags = new Set(
-        existingBeta
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
+      overrides["anthropic-beta"] = mergeAnthropicCacheTtlBetaFlag(
+        session.headers.get("anthropic-beta")
       );
-      betaFlags.add("extended-cache-ttl-2025-04-11");
-      // 确保包含基础的 prompt-caching 标记
-      if (betaFlags.size === 1) {
-        betaFlags.add("prompt-caching-2024-07-31");
-      }
-      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
@@ -4801,11 +4885,21 @@ export class ProxyForwarder {
     // 必须在任何其他操作之前设置，否则 ECONNRESET 等错误会导致 uncaughtException
     const rawBody = undiciRes.body as Readable;
     rawBody.on("error", (err) => {
-      logger.warn("ProxyForwarder: undici body stream error (caught early)", {
+      const code = (err as NodeJS.ErrnoException).code;
+      // 客户端/上游断连是高频路径事件，降级为 debug 以减少噪音
+      // 集合需与下方 streamPipeline 回调中的 isExpectedDisconnect 保持一致
+      const isExpectedDisconnect =
+        code === "ECONNRESET" ||
+        code === "UND_ERR_SOCKET" ||
+        code === "UND_ERR_ABORTED" ||
+        code === "ABORT_ERR" ||
+        code === "ERR_STREAM_PREMATURE_CLOSE";
+      const log = isExpectedDisconnect ? logger.debug : logger.warn;
+      log("ProxyForwarder: undici body stream error (caught early)", {
         providerId,
         providerName,
         error: err.message,
-        errorCode: (err as NodeJS.ErrnoException).code,
+        errorCode: code,
       });
     });
 
@@ -4869,28 +4963,47 @@ export class ProxyForwarder {
         finishFlush: zlibConstants.Z_SYNC_FLUSH,
       });
 
-      // 捕获 Gunzip 错误但不抛出（容错处理）
+      // 捕获 Gunzip 错误：使用 destroy(err) 而非 end()，避免与下游 cancel() 调用
+      // destroy(reason) 之间出现状态竞争，导致 native zlib 段错误（issue #1147）
       gunzip.on("error", (err) => {
-        logger.warn("ProxyForwarder: Gunzip decompression error (ignored)", {
+        logger.warn("ProxyForwarder: Gunzip decompression error", {
           providerId,
           providerName,
           error: err.message,
-          note: "Partial data may be returned, but no crash",
+          note: "Stream destroyed; partial data may already have been forwarded",
         });
-        // 尝试结束流，避免挂起
-        try {
-          gunzip.end();
-        } catch {
-          // ignore
+        if (!gunzip.destroyed) {
+          try {
+            gunzip.destroy(err);
+          } catch {
+            // ignore
+          }
         }
       });
 
-      // 将 undici body (Node Readable) pipe 到 Gunzip
-      // 注意：使用前面已添加错误处理器的 rawBody
-      rawBody.pipe(gunzip);
+      // 使用 stream.pipeline() 替代 .pipe()，确保任一端出错时双向 destroy
+      // 原子完成，消除 .pipe() 在错误路径上残留的清理竞争窗口
+      streamPipeline(rawBody, gunzip, (err) => {
+        if (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          const isExpectedDisconnect =
+            code === "ECONNRESET" ||
+            code === "UND_ERR_SOCKET" ||
+            code === "UND_ERR_ABORTED" ||
+            code === "ABORT_ERR" ||
+            code === "ERR_STREAM_PREMATURE_CLOSE";
+          const log = isExpectedDisconnect ? logger.debug : logger.warn;
+          log("ProxyForwarder: rawBody->gunzip pipeline ended with error", {
+            providerId,
+            providerName,
+            error: err.message,
+            errorCode: code,
+          });
+        }
+      });
 
       // 将 Gunzip 流转换为 Web 流（容错版本）
-      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
+      bodyStream = nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
       // 移除 content-encoding 和 content-length（避免下游再解压或使用错误长度）
       responseHeaders.delete("content-encoding");
@@ -4903,7 +5016,7 @@ export class ProxyForwarder {
         contentEncoding: encoding || "(none)",
       });
       // 注意：使用前面已添加错误处理器的 rawBody
-      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(rawBody, providerId, providerName);
+      bodyStream = nodeStreamToWebStreamSafe(rawBody, providerId, providerName);
     }
 
     logger.debug("ProxyForwarder: undici.request completed, returning wrapped response", {
@@ -4918,93 +5031,6 @@ export class ProxyForwarder {
       // 未知/非标准状态码不应兜底为 OK（避免误导客户端日志与调试）
       statusText: STATUS_CODES[undiciRes.statusCode] ?? "",
       headers: responseHeaders,
-    });
-  }
-
-  /**
-   * 将 Node.js Readable 流转换为 Web ReadableStream（容错版本）
-   *
-   * 关键特性：吞掉上游流的错误事件，避免 "terminated" 错误冒泡到调用者
-   */
-  private static nodeStreamToWebStreamSafe(
-    nodeStream: Readable,
-    providerId: number,
-    providerName: string
-  ): ReadableStream<Uint8Array> {
-    let chunkCount = 0;
-    let totalBytes = 0;
-
-    return new ReadableStream<Uint8Array>({
-      start(controller) {
-        logger.debug("ProxyForwarder: Starting Node-to-Web stream conversion", {
-          providerId,
-          providerName,
-        });
-
-        nodeStream.on("data", (chunk: Buffer | Uint8Array) => {
-          chunkCount++;
-          totalBytes += chunk.length;
-          try {
-            const buf = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-            controller.enqueue(buf);
-          } catch {
-            // 如果 controller 已关闭，忽略
-          }
-        });
-
-        nodeStream.on("end", () => {
-          logger.debug("ProxyForwarder: Node stream ended normally", {
-            providerId,
-            providerName,
-            chunkCount,
-            totalBytes,
-          });
-          try {
-            controller.close();
-          } catch {
-            // 如果已关闭，忽略
-          }
-        });
-
-        nodeStream.on("close", () => {
-          logger.debug("ProxyForwarder: Node stream closed", {
-            providerId,
-            providerName,
-            chunkCount,
-            totalBytes,
-          });
-          try {
-            controller.close();
-          } catch {
-            // 如果已关闭，忽略
-          }
-        });
-
-        // ⭐ 关键：将上游流错误传播到下游 reader，确保 ResponseHandler 能检测到截断
-        nodeStream.on("error", (err) => {
-          logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
-            providerId,
-            providerName,
-            error: err.message,
-            errorName: err.name,
-          });
-          try {
-            controller.error(err);
-          } catch {
-            // 如果已关闭或已出错，忽略
-          }
-        });
-      },
-
-      cancel(reason) {
-        try {
-          nodeStream.destroy(
-            reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
-          );
-        } catch {
-          // ignore
-        }
-      },
     });
   }
 }

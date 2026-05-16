@@ -22,12 +22,7 @@ export interface FakeStreamingWhitelistEntry {
 
 // Default whitelist used when system_settings has no persisted value (legacy
 // upgrade path). A persisted empty array is preserved as explicit opt-out.
-export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [
-  { model: "gpt-image-2", groupTags: [] },
-  { model: "gpt-image-1.5", groupTags: [] },
-  { model: "gemini-3.1-flash-image-preview", groupTags: [] },
-  { model: "gemini-3-pro-image-preview", groupTags: [] },
-];
+export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [];
 
 export interface SystemSettings {
   id: number;
@@ -42,6 +37,11 @@ export interface SystemSettings {
 
   // Codex Priority 单独计费口径
   codexPriorityBillingSource: CodexPriorityBillingSource;
+
+  // 非成功请求按 token 用量计费（默认关闭）
+  // 开启后：返回非 2xx 状态（如 499 客户端中断）但上游仍回报了正向 token 用量时按 usage 计费；
+  //         fake-200 上游错误识别仍生效，保证假成功响应不会被错误计费。
+  billNonSuccessfulRequests: boolean;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -148,6 +148,9 @@ export interface UpdateSystemSettingsInput {
 
   // Codex Priority 单独计费口径（可选）
   codexPriorityBillingSource?: CodexPriorityBillingSource;
+
+  // 非成功请求按 token 用量计费（可选）
+  billNonSuccessfulRequests?: boolean;
 
   // 系统时区配置（可选）
   timezone?: string | null;

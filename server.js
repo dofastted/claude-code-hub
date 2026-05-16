@@ -7,10 +7,11 @@
 //
 // Architecture: this server is a thin tunnel. For each client WebSocket frame,
 // we build an equivalent HTTP POST against the same app's /v1/responses
-// endpoint (with an x-cch-client-transport header) so that auth, provider
-// selection, guard pipeline, forwarder, circuit breakers, observability, and
-// all existing TypeScript business logic run exactly once. Upstream WebSocket
-// attempts live inside that TypeScript pipeline (forwarder), not here.
+// endpoint (with x-cch-client-transport and x-cch-responses-ws-session headers)
+// so that auth, provider selection, guard pipeline, forwarder, circuit
+// breakers, observability, and all existing TypeScript business logic run
+// exactly once. Upstream WebSocket attempts and per-client upstream reuse live
+// inside that TypeScript pipeline (forwarder), not here.
 //
 // Compatibility:
 // - Non-WebSocket clients: unaffected. HTTP still flows through Next.js.
@@ -25,7 +26,13 @@ const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
 
-const dev = process.env.NODE_ENV !== "production";
+function isNextDevMode(nodeEnv) {
+  return nodeEnv !== "production";
+}
+
+// 保留既有本地语义：只有显式 production 才服务已构建产物；Docker/K8s
+// 镜像会显式设置 NODE_ENV=production 和 PORT=3000。
+const dev = isNextDevMode(process.env.NODE_ENV);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);
 
@@ -39,6 +46,7 @@ const INTERNAL_TUNNEL_HOST =
 const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
+const WS_SESSION_HEADER = "x-cch-responses-ws-session";
 const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
 const INTERNAL_SECRET_ENV = "CCH_RESPONSES_WS_INTERNAL_SECRET";
 
@@ -51,12 +59,14 @@ const RESERVED_INTERNAL_HEADER_PREFIX = "x-cch-";
 // Per-WebSocket-connection guardrails: cap the queue depth and total queued
 // bytes to make a misbehaving / malicious client a bounded-memory event.
 const MAX_PENDING_FRAMES = 64;
-const MAX_PENDING_BYTES = 4 * 1024 * 1024; // 4 MiB across all queued frames
+const MAX_PENDING_BYTES = 64 * 1024 * 1024; // 64 MiB across all queued frames
 
 // Maximum payload size for any single inbound WS frame. The default `ws`
-// limit is 100 MiB, far larger than a Responses create body needs to be and
-// dangerous for a public endpoint.
-const WS_MAX_PAYLOAD_BYTES = 1 * 1024 * 1024; // 1 MiB per frame
+// limit is 100 MiB. We pick 32 MiB to accommodate Codex requests that ship
+// large conversation history alongside the prompt — a tighter cap caused the
+// `ws` library to socket.destroy() (TCP RST) without sending a close frame,
+// surfacing on the client as "Connection reset without closing handshake".
+const WS_MAX_PAYLOAD_BYTES = 32 * 1024 * 1024; // 32 MiB per frame
 
 const TERMINAL_EVENT_TYPES = new Set([
   "response.completed",
@@ -117,6 +127,7 @@ function sanitizedRequestPath(rawUrl) {
 async function handleWebSocketConnection(ws, req) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
+  const responsesWsSessionId = randomUUID();
   let inFlight = false;
   const pending = [];
   let pendingBytes = 0;
@@ -126,18 +137,77 @@ async function handleWebSocketConnection(ws, req) {
   // (and provider concurrency / breaker counters) keep running for minutes.
   let currentInternalReq = null;
 
-  const finalize = () => {
-    closed = true;
-    if (currentInternalReq) {
-      try {
-        currentInternalReq.destroy();
-      } catch {
-        // ignore
+  const abortCurrentInternalReq = () => {
+    if (!currentInternalReq) return;
+    const reqToDestroy = currentInternalReq;
+    currentInternalReq = null;
+    try {
+      if (!reqToDestroy.destroyed) {
+        reqToDestroy.destroy();
       }
-      currentInternalReq = null;
+    } catch {
+      // ignore
+    }
+  };
+
+  const cleanupUpstreamWsSession = () => {
+    const cleanup = globalThis.__cchCleanupResponsesWsSession;
+    if (typeof cleanup !== "function") return;
+    try {
+      cleanup(responsesWsSessionId);
+    } catch (err) {
+      log("warn", "ws_upstream_session_cleanup_failed", {
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+  };
+
+  const dropPendingFrames = () => {
+    if (pending.length > 0) {
+      log("warn", "ws_pending_dropped_on_close", {
+        droppedFrames: pending.length,
+        droppedBytes: pendingBytes,
+      });
     }
     pending.length = 0;
     pendingBytes = 0;
+  };
+
+  const finalize = () => {
+    if (closed) return;
+    closed = true;
+    abortCurrentInternalReq();
+    dropPendingFrames();
+    cleanupUpstreamWsSession();
+  };
+
+  // Synchronously mark the connection closed so any pipelined frame in
+  // `pending` is dropped *before* drain() can dispatch another upstream
+  // request. Without this the gap between ws.close() and the async
+  // ws.on("close") event is wide enough for `drain()` to pop the next frame
+  // and run `forwardToInternalHttp` against the upstream — work the client
+  // can never receive (safeSend would fail) but the provider would still bill.
+  const requestClose = (code, reason) => {
+    if (closed) {
+      abortCurrentInternalReq();
+      dropPendingFrames();
+      return;
+    }
+    if (ws && ws.readyState >= 2) {
+      // Already closing/closed; just make sure local state matches.
+      finalize();
+      return;
+    }
+    closed = true;
+    abortCurrentInternalReq();
+    dropPendingFrames();
+    cleanupUpstreamWsSession();
+    log("info", "ws_client_close_initiated", { code, reason });
+    try {
+      ws.close(code, reason);
+    } catch (err) {
+      log("warn", "ws_client_close_failed", { error: String(err) });
+    }
   };
 
   ws.on("close", finalize);
@@ -153,11 +223,7 @@ async function handleWebSocketConnection(ws, req) {
 
     if (typeof raw !== "string") {
       emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      try {
-        ws.close(1003, "binary_not_supported");
-      } catch {
-        // ignore
-      }
+      requestClose(1003, "binary_not_supported");
       return;
     }
 
@@ -195,9 +261,22 @@ async function handleWebSocketConnection(ws, req) {
       body.model = queryModel;
     }
 
-    await forwardToInternalHttp(ws, req, body, (clientReq) => {
-      currentInternalReq = clientReq;
+    log("info", "ws_request_started", {
+      model: typeof body.model === "string" ? body.model : null,
+      payloadBytes: Buffer.byteLength(raw, "utf8"),
+      hasPreviousResponseId: typeof body.previous_response_id === "string",
     });
+
+    await forwardToInternalHttp(
+      ws,
+      req,
+      body,
+      responsesWsSessionId,
+      (clientReq) => {
+        currentInternalReq = clientReq;
+      },
+      requestClose
+    );
     if (!closed) {
       currentInternalReq = null;
     }
@@ -220,11 +299,7 @@ async function handleWebSocketConnection(ws, req) {
             error: String(err && err.message ? err.message : err),
           });
           emitErrorEvent(ws, "internal_error", "Failed to process queued request");
-          try {
-            ws.close(1011, "internal_error");
-          } catch {
-            // ignore
-          }
+          requestClose(1011, "internal_error");
         });
       }
     }
@@ -234,11 +309,7 @@ async function handleWebSocketConnection(ws, req) {
     if (closed) return;
     if (isBinary) {
       emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      try {
-        ws.close(1003, "binary_not_supported");
-      } catch {
-        // ignore
-      }
+      requestClose(1003, "binary_not_supported");
       return;
     }
     const text = data.toString("utf8");
@@ -250,11 +321,7 @@ async function handleWebSocketConnection(ws, req) {
         attemptedFrameSize: size,
       });
       emitErrorEvent(ws, "too_many_requests", "Pending frame limit exceeded");
-      try {
-        ws.close(1008, "too_many_requests");
-      } catch {
-        // ignore
-      }
+      requestClose(1008, "too_many_requests");
       return;
     }
     pending.push(text);
@@ -264,16 +331,34 @@ async function handleWebSocketConnection(ws, req) {
         error: String(err && err.message ? err.message : err),
       });
       emitErrorEvent(ws, "internal_error", "Failed to process request");
-      try {
-        ws.close(1011, "internal_error");
-      } catch {
-        // ignore
-      }
+      requestClose(1011, "internal_error");
     });
   });
 }
 
-async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq) {
+async function forwardToInternalHttp(
+  ws,
+  originalReq,
+  body,
+  responsesWsSessionId,
+  registerInternalReq,
+  requestClose
+) {
+  // requestClose(code, reason) initiates the WebSocket closing handshake AND
+  // synchronously marks the client connection closed so the caller's pending
+  // queue stops dispatching follow-up frames against the upstream. Tests that
+  // exercise this function in isolation can pass a no-op fallback.
+  const initiateClose =
+    typeof requestClose === "function"
+      ? requestClose
+      : (code, reason) => {
+          log("info", "ws_client_close_initiated", { code, reason });
+          try {
+            ws.close(code, reason);
+          } catch (err) {
+            log("warn", "ws_client_close_failed", { error: String(err) });
+          }
+        };
   const internalHeaders = {};
   for (const [k, v] of Object.entries(originalReq.headers)) {
     const lower = k.toLowerCase();
@@ -308,6 +393,9 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
   internalHeaders["content-type"] = "application/json";
   internalHeaders[CLIENT_TRANSPORT_HEADER] = "websocket";
   internalHeaders[WS_FORWARD_FLAG_HEADER] = "1";
+  if (typeof responsesWsSessionId === "string" && responsesWsSessionId.length > 0) {
+    internalHeaders[WS_SESSION_HEADER] = responsesWsSessionId;
+  }
   // Per-process loopback secret. Read from process.env so it can be picked
   // up by any code path that needs to verify (the TS forwarder reads the
   // same env var via `internal-secret.ts`). The secret is generated at
@@ -338,6 +426,13 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
       (res) => {
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
+        let responseSettled = false;
+        const settleResponse = () => {
+          if (responseSettled) return false;
+          responseSettled = true;
+          resolve();
+          return true;
+        };
 
         if (!isSse) {
           // Upstream returned non-stream JSON (e.g. error response). Collect
@@ -345,6 +440,7 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
           const chunks = [];
           res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
+            if (responseSettled) return;
             const text = Buffer.concat(chunks).toString("utf8");
             let parsed;
             try {
@@ -352,29 +448,49 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
             } catch {
               parsed = { raw: text };
             }
-            if (res.statusCode && res.statusCode >= 400) {
+            const isHttpError = !!(res.statusCode && res.statusCode >= 400);
+            if (isHttpError) {
               safeSend(ws, {
                 type: "error",
+                status: res.statusCode,
                 error:
                   typeof parsed === "object" && parsed && parsed.error
                     ? parsed.error
                     : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
+              });
+              log("info", "ws_terminal_event_sent", {
+                type: "error",
+                source: "json",
+                status: res.statusCode,
               });
             } else {
               safeSend(ws, {
                 type: "response.completed",
                 response: parsed,
               });
+              log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
             }
-            resolve();
+            settleResponse();
           });
           res.on("error", (err) => {
+            if (responseSettled) return;
             emitErrorEvent(
               ws,
               "internal_response_error",
               String(err && err.message ? err.message : err)
             );
-            resolve();
+            initiateClose(1011, "internal_response_error");
+            settleResponse();
+          });
+          res.on("close", () => {
+            if (responseSettled) return;
+            emitErrorEvent(
+              ws,
+              "internal_response_closed",
+              "Internal response closed before a complete JSON body was received"
+            );
+            initiateClose(1011, "internal_response_closed");
+            settleResponse();
           });
           return;
         }
@@ -384,7 +500,16 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
         // upstreams in the wild emit either form.
         let buffer = "";
         let sawTerminal = false;
+        let terminalEventType = null;
         const EVENT_DELIMITER = /\r?\n\r?\n/;
+        const failIfUnsettled = (code, message, closeReason) => {
+          if (responseSettled) return;
+          if (!sawTerminal) {
+            emitErrorEvent(ws, code, message);
+            initiateClose(1011, closeReason);
+          }
+          settleResponse();
+        };
 
         const flushEvents = () => {
           const parts = buffer.split(EVENT_DELIMITER);
@@ -423,16 +548,20 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
             safeSend(ws, event);
             if (event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type)) {
               sawTerminal = true;
+              terminalEventType = event.type;
+              log("info", "ws_terminal_event_sent", { type: event.type, source: "sse" });
             }
           }
         };
 
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
+          if (responseSettled) return;
           buffer += chunk;
           flushEvents();
         });
         res.on("end", () => {
+          if (responseSettled) return;
           // Flush any remaining buffered event
           if (buffer.trim().length > 0) {
             buffer += "\n\n";
@@ -444,16 +573,29 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
               "stream_ended_without_terminal",
               "Upstream stream ended before emitting a terminal response event"
             );
+            initiateClose(1011, "stream_ended_without_terminal");
+          } else {
+            // OpenAI Responses WebSocket mode is persistent: after a terminal
+            // event, the same client connection can send the next
+            // response.create. Do not close here; only fatal transport/protocol
+            // errors initiate a close handshake.
+            log("info", "ws_turn_completed", { terminalEventType });
           }
-          resolve();
+          settleResponse();
         });
         res.on("error", (err) => {
-          emitErrorEvent(
-            ws,
+          failIfUnsettled(
             "internal_response_error",
-            String(err && err.message ? err.message : err)
+            String(err && err.message ? err.message : err),
+            "internal_response_error"
           );
-          resolve();
+        });
+        res.on("close", () => {
+          failIfUnsettled(
+            "internal_response_closed",
+            "Internal response closed before emitting a terminal response event",
+            "internal_response_closed"
+          );
         });
       }
     );
@@ -469,6 +611,7 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
           "internal_request_error",
           String(err && err.message ? err.message : err)
         );
+        initiateClose(1011, "internal_request_error");
       }
       resolve();
     });
@@ -488,6 +631,14 @@ function isResponsesWsUpgrade(req) {
 }
 
 async function main() {
+  // Surface the build-time Next config via the env var Next's own standalone
+  // template uses. See server-lib/standalone-config.js for the full rationale.
+  if (!dev) {
+    // eslint-disable-next-line global-require
+    const { applyStandaloneNextConfig } = require("./server-lib/standalone-config");
+    applyStandaloneNextConfig({ rootDir: __dirname, env: process.env, log });
+  }
+
   // Import Next programmatically. We require it lazily so that the server can
   // still report a clean error if Next is not installed (unlikely but possible
   // in a misconfigured deployment).
@@ -542,8 +693,9 @@ async function main() {
     }
   });
 
+  let wss = null;
   if (WebSocketServer) {
-    const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
+    wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
 
     server.on("upgrade", (req, socket, head) => {
       if (!isResponsesWsUpgrade(req)) {
@@ -578,10 +730,141 @@ async function main() {
       wsEnabled: !!WebSocketServer,
     });
   });
+
+  registerOrchestratedShutdown(server, wss);
+}
+
+// Graceful shutdown orchestration. Lives here (not in instrumentation.ts) because
+// only this process owns the `server` handle returned by http.createServer().
+//
+// Sequence (bounded by SHUTDOWN_HARD_EXIT_MS as the final safety net):
+//   1. Mark shutdown flag    -> /api/health/ready returns 503 -> Service drains
+//   2. server.close()        -> stop accepting; in-flight HTTP finishes
+//   3. wss.close()           -> reject new WS upgrades
+//   4. Wait for drain        -> bounded by SHUTDOWN_DRAIN_MS
+//   5. runApplicationCleanup -> Redis / Langfuse / msg buffer / schedulers; bounded
+//      by SHUTDOWN_CLEANUP_MS. Inside cleanup, asyncTaskManager.cleanupAll() runs
+//      LAST so streaming responses had a chance to finish during step 4.
+//   6. process.exit(0)
+function registerOrchestratedShutdown(server, wss) {
+  let shuttingDown = false;
+
+  // Positive integer parser: `Number("0") || default` would silently coerce an
+  // intentional 0 back to the default. Mirrors the parser in
+  // src/lib/langfuse/index.ts so operator overrides behave consistently.
+  const parsePosInt = (raw, fallback) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+
+  // Defaults: drain + cleanup = 25s, with a 3s gap before the hard-exit
+  // watchdog. Without the gap, when both phases hit their cap the watchdog
+  // (registered at T=0) fires at the same instant as `process.exit(0)` and
+  // wins by ordering, falsely logging the shutdown as failed.
+  const drainMs = parsePosInt(process.env.SHUTDOWN_DRAIN_MS, 15000);
+  const cleanupMs = parsePosInt(process.env.SHUTDOWN_CLEANUP_MS, 10000);
+  const hardExitMs = parsePosInt(process.env.SHUTDOWN_HARD_EXIT_MS, 28000);
+
+  const orchestratedShutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log("info", "shutdown_received", { signal, drainMs, cleanupMs, hardExitMs });
+
+    // Final safety: even if every step below hangs, this terminates the process.
+    // .unref() so the timer itself doesn't keep the event loop alive.
+    const hardExit = setTimeout(() => {
+      log("error", "shutdown_hard_exit_watchdog", { hardExitMs });
+      process.exit(1);
+    }, hardExitMs);
+    if (typeof hardExit.unref === "function") hardExit.unref();
+
+    // 1. Flip readiness BEFORE closing the listener so probes already in flight
+    //    see 503 and the Service starts removing this pod from endpoints.
+    const lifecycle = globalThis.__CCH_LIFECYCLE__;
+    try {
+      lifecycle?.markShuttingDown?.();
+    } catch (err) {
+      log("warn", "shutdown_mark_failed", { error: String(err && err.message ? err.message : err) });
+    }
+
+    // 2 + 3. Stop accepting new connections.
+    const closeServer = new Promise((resolve) => {
+      try {
+        server.close((err) => {
+          if (err) {
+            log("warn", "shutdown_server_close_error", {
+              error: String(err && err.message ? err.message : err),
+            });
+          }
+          resolve();
+        });
+      } catch (err) {
+        log("warn", "shutdown_server_close_threw", {
+          error: String(err && err.message ? err.message : err),
+        });
+        resolve();
+      }
+    });
+    if (wss && typeof wss.close === "function") {
+      try {
+        wss.close();
+      } catch (err) {
+        log("warn", "shutdown_wss_close_error", {
+          error: String(err && err.message ? err.message : err),
+        });
+      }
+    }
+
+    // 4. Bounded drain — server.close() resolves only after every in-flight
+    //    connection completes; we cap it so a stuck client can't hold us forever.
+    //    Clearing the timer on natural close avoids a misleading
+    //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
+    await Promise.race([
+      closeServer,
+      new Promise((resolve) => {
+        const t = setTimeout(() => {
+          log("warn", "shutdown_drain_timeout", { drainMs });
+          resolve();
+        }, drainMs);
+        if (typeof t.unref === "function") t.unref();
+        closeServer.finally(() => clearTimeout(t));
+      }),
+    ]);
+
+    // 5. Application-level cleanup.
+    try {
+      if (typeof lifecycle?.runApplicationCleanup === "function") {
+        await lifecycle.runApplicationCleanup(signal, { totalTimeoutMs: cleanupMs });
+      } else {
+        log("warn", "shutdown_cleanup_unavailable", {
+          reason: "lifecycle_globals_not_bound",
+        });
+      }
+    } catch (err) {
+      log("warn", "shutdown_cleanup_error", {
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+
+    log("info", "shutdown_complete", { signal });
+    clearTimeout(hardExit);
+    process.exit(0);
+  };
+
+  process.once("SIGTERM", () => void orchestratedShutdown("SIGTERM"));
+  process.once("SIGINT", () => void orchestratedShutdown("SIGINT"));
 }
 
 // Exposed for tests; not part of the long-lived server entrypoint.
-module.exports = { sanitizedRequestPath };
+module.exports = {
+  sanitizedRequestPath,
+  isNextDevMode,
+  handleWebSocketConnection,
+  forwardToInternalHttp,
+  registerOrchestratedShutdown,
+  WS_MAX_PAYLOAD_BYTES,
+  MAX_PENDING_BYTES,
+};
 
 if (require.main === module) {
   main().catch((err) => {

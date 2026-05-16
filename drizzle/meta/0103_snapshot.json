@@ -1,6 +1,6 @@
 {
-  "id": "9549f068-e477-44fe-bd41-82faba35ff4a",
-  "prevId": "8e995769-baca-4f96-8540-726e9a791f9e",
+  "id": "26be522c-7e44-4034-a3bd-b97fa17b9627",
+  "prevId": "278b6561-15fa-4eac-804d-228f8480e173",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2974,6 +2974,235 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.public_status_hourly_rollups": {
+      "name": "public_status_hourly_rollups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bucket_start": {
+          "name": "bucket_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bucket_end": {
+          "name": "bucket_end",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config_version": {
+          "name": "config_version",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_group_name": {
+          "name": "source_group_name",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_group_slug": {
+          "name": "public_group_slug",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_model_key": {
+          "name": "public_model_key",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vendor_icon_key": {
+          "name": "vendor_icon_key",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_type_badge": {
+          "name": "request_type_badge",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "success_count": {
+          "name": "success_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "failure_count": {
+          "name": "failure_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sample_count": {
+          "name": "sample_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "availability_pct": {
+          "name": "availability_pct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ttfb_ms": {
+          "name": "ttfb_ms",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tps": {
+          "name": "tps",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generated_at": {
+          "name": "generated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uniq_public_status_hourly_rollup": {
+          "name": "uniq_public_status_hourly_rollup",
+          "columns": [
+            {
+              "expression": "bucket_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "public_group_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "public_model_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "request_type_badge",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_public_status_hourly_rollups_bucket": {
+          "name": "idx_public_status_hourly_rollups_bucket",
+          "columns": [
+            {
+              "expression": "bucket_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_public_status_hourly_rollups_config_bucket": {
+          "name": "idx_public_status_hourly_rollups_config_bucket",
+          "columns": [
+            {
+              "expression": "config_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bucket_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_public_status_hourly_rollups_group_model": {
+          "name": "idx_public_status_hourly_rollups_group_model",
+          "columns": [
+            {
+              "expression": "public_group_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "public_model_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.request_filters": {
       "name": "request_filters",
       "schema": "",
@@ -3336,6 +3565,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'requested'"
+        },
+        "bill_non_successful_requests": {
+          "name": "bill_non_successful_requests",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "timezone": {
           "name": "timezone",
@@ -5265,235 +5501,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.public_status_hourly_rollups": {
-      "name": "public_status_hourly_rollups",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "bucket_start": {
-          "name": "bucket_start",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bucket_end": {
-          "name": "bucket_end",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "config_version": {
-          "name": "config_version",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_group_name": {
-          "name": "source_group_name",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "public_group_slug": {
-          "name": "public_group_slug",
-          "type": "varchar(120)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "public_model_key": {
-          "name": "public_model_key",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "label": {
-          "name": "label",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vendor_icon_key": {
-          "name": "vendor_icon_key",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_type_badge": {
-          "name": "request_type_badge",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "success_count": {
-          "name": "success_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "failure_count": {
-          "name": "failure_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "sample_count": {
-          "name": "sample_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "availability_pct": {
-          "name": "availability_pct",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ttfb_ms": {
-          "name": "ttfb_ms",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tps": {
-          "name": "tps",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "generated_at": {
-          "name": "generated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uniq_public_status_hourly_rollup": {
-          "name": "uniq_public_status_hourly_rollup",
-          "columns": [
-            {
-              "expression": "bucket_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "public_group_slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "public_model_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "request_type_badge",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_public_status_hourly_rollups_bucket": {
-          "name": "idx_public_status_hourly_rollups_bucket",
-          "columns": [
-            {
-              "expression": "bucket_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_public_status_hourly_rollups_config_bucket": {
-          "name": "idx_public_status_hourly_rollups_config_bucket",
-          "columns": [
-            {
-              "expression": "config_version",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bucket_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_public_status_hourly_rollups_group_model": {
-          "name": "idx_public_status_hourly_rollups_group_model",
-          "columns": [
-            {
-              "expression": "public_group_slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "public_model_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -5,17 +5,15 @@ import {
   ChevronDown,
   CircleHelp,
   Clock,
+  Coins,
   Eye,
   FileCode,
   Globe,
   MapPin,
   Network,
   Pencil,
-  Plus,
-  Radio,
   Terminal,
   Thermometer,
-  Trash2,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -23,8 +21,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
-import { GroupMultiSelect } from "@/app/[locale]/settings/request-filters/_components/group-multi-select";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InlineWarning } from "@/components/ui/inline-warning";
@@ -40,6 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -65,6 +62,7 @@ interface SystemSettingsFormProps {
     | "currencyDisplay"
     | "billingModelSource"
     | "codexPriorityBillingSource"
+    | "billNonSuccessfulRequests"
     | "timezone"
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
@@ -124,6 +122,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [codexPriorityBillingSource, setCodexPriorityBillingSource] =
     useState<CodexPriorityBillingSource>(initialSettings.codexPriorityBillingSource);
+  const [billNonSuccessfulRequests, setBillNonSuccessfulRequests] = useState(
+    initialSettings.billNonSuccessfulRequests
+  );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -298,6 +299,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         billingModelSource,
         codexPriorityBillingSource,
+        billNonSuccessfulRequests,
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
@@ -336,6 +338,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
+        setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
@@ -541,6 +544,46 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           />
         </div>
 
+        {/* Bill Non-Successful Requests */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <Coins className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">
+                  {t("billNonSuccessfulRequests")}
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("billNonSuccessfulRequestsTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("billNonSuccessfulRequestsTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("billNonSuccessfulRequestsDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="bill-non-successful-requests"
+            aria-label={t("billNonSuccessfulRequests")}
+            checked={billNonSuccessfulRequests}
+            onCheckedChange={(checked) => setBillNonSuccessfulRequests(checked)}
+            disabled={isPending}
+          />
+        </div>
+
         {/* Verbose Provider Error */}
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
           <div className="flex items-start gap-3">
@@ -617,30 +660,6 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-http2"
             checked={enableHttp2}
             onCheckedChange={(checked) => setEnableHttp2(checked)}
-            disabled={isPending}
-          />
-        </div>
-
-        {/* Enable OpenAI Responses WebSocket (Codex only) */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
-              <Radio className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                {t("enableOpenaiResponsesWebsocket")}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t("enableOpenaiResponsesWebsocketDesc")}
-              </p>
-            </div>
-          </div>
-          <Switch
-            id="enable-openai-responses-websocket"
-            aria-label={t("enableOpenaiResponsesWebsocket")}
-            checked={enableOpenaiResponsesWebsocket}
-            onCheckedChange={(checked) => setEnableOpenaiResponsesWebsocket(checked)}
             disabled={isPending}
           />
         </div>
@@ -803,109 +822,6 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
             disabled={isPending}
           />
-        </div>
-
-        {/* Fake Streaming Whitelist */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
-              <Radio className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">{t("fakeStreaming.title")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t("fakeStreaming.description")}
-              </p>
-            </div>
-          </div>
-
-          {fakeStreamingWhitelist.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic px-1">
-              {t("fakeStreaming.emptyState")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {fakeStreamingWhitelist.map((entry, index) => (
-                <div
-                  key={index}
-                  className="rounded-lg border border-border bg-muted/30 p-3 space-y-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor={`fake-streaming-model-${index}`}
-                      className="text-xs font-medium text-muted-foreground w-20 shrink-0"
-                    >
-                      {t("fakeStreaming.modelLabel")}
-                    </Label>
-                    <Input
-                      id={`fake-streaming-model-${index}`}
-                      data-testid={`fake-streaming-model-${index}`}
-                      value={entry.model}
-                      onChange={(event) => {
-                        const next = event.target.value;
-                        setFakeStreamingWhitelist((prev) =>
-                          prev.map((item, i) => (i === index ? { ...item, model: next } : item))
-                        );
-                      }}
-                      placeholder={t("fakeStreaming.modelPlaceholder")}
-                      disabled={isPending}
-                      className={inputClassName}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      data-testid={`fake-streaming-remove-${index}`}
-                      onClick={() => {
-                        setFakeStreamingWhitelist((prev) => prev.filter((_, i) => i !== index));
-                      }}
-                      disabled={isPending}
-                      aria-label={t("fakeStreaming.remove")}
-                      className="shrink-0 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Label className="text-xs font-medium text-muted-foreground w-20 shrink-0 pt-2">
-                      {t("fakeStreaming.groupsLabel")}
-                    </Label>
-                    <div className="flex-1 space-y-1">
-                      <GroupMultiSelect
-                        selectedGroupTags={entry.groupTags}
-                        onChange={(groupTags) => {
-                          setFakeStreamingWhitelist((prev) =>
-                            prev.map((item, i) => (i === index ? { ...item, groupTags } : item))
-                          );
-                        }}
-                        disabled={isPending}
-                      />
-                      {entry.groupTags.length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          {t("fakeStreaming.allGroupsHint")}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            data-testid="fake-streaming-add"
-            onClick={() => {
-              setFakeStreamingWhitelist((prev) => [...prev, { model: "", groupTags: [] }]);
-            }}
-            disabled={isPending}
-            className="w-full"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            {t("fakeStreaming.addModel")}
-          </Button>
         </div>
 
         {/* Enable Codex Session ID Completion */}

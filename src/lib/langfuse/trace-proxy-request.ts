@@ -68,6 +68,10 @@ function isErrorReason(reason: string | undefined): boolean {
 
 type ObservationLevel = "DEBUG" | "DEFAULT" | "WARNING" | "ERROR";
 
+type LangfuseTraceIOSetter = {
+  setTraceIO: (payload: { input: unknown; output: unknown }) => void;
+};
+
 export interface TraceContext {
   session: ProxySession;
   responseHeaders: Headers;
@@ -408,7 +412,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     );
 
     // Explicitly set trace-level input/output (propagateAttributes does not support these)
-    rootSpan.updateTrace({
+    (rootSpan as unknown as LangfuseTraceIOSetter).setTraceIO({
       input: actualRequestBody,
       output: actualResponseBody,
     });

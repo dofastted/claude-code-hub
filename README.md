@@ -94,6 +94,21 @@ Claude Code / Codex / Gemini 官方渠道价格低至原价的 38% / 6% / 9%，�
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">
+<img src="public/readme/pateway.png" alt="PatewayAI Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 特别优惠</b>：<a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">PatewayAI</a> 是一家面向重度 AI 开发者、专注官方直连的高品质模型 API 中转服务商。提供 Claude 全系列与 Codex 系列模型，100% 官方源直供，不掺假不注水，欢迎检验。计费透明，Token 级账单可逐笔核验。<br/>
+同时支持企业级高并发，并为企业客户提供了专业的管理平台，企业客户可签订正式合同并开具发票，更多详情进入官网获取联系方式。<br/>
+现在通过 <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">此链接注册</a> 即送 <b>$3 试用额度</b>，用户充值低至 <b>6 折</b>，邀请好友双向赠送，邀请奖励可达 <b>$150</b>。
+</td>
+</tr>
+</table>
+
 ## ✨ 核心功能 Highlights
 
 - 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
@@ -355,7 +370,8 @@ cch doctor            # 诊断集群与部署状态
 | `ENABLE_API_KEY_VACUUM_FILTER`             | `true`                   | 是否启用 API Key 真空过滤器（仅负向短路无效 key；可设为 `false/0` 关闭用于排查/节省内存）。 |
 | `ENABLE_API_KEY_REDIS_CACHE`               | `true`                   | 是否启用 API Key 鉴权 Redis 缓存（需 Redis 可用；异常自动回落到 DB）。       |
 | `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key 鉴权缓存 TTL（秒，默认 60，最大 3600）。                              |
-| `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
+| `AUTH_SESSION_TTL_SECONDS`                 | `604800`                 | Web UI 登录态 TTL（秒，默认 7 天）；`ADMIN_TOKEN` opaque 登录的签名 cookie 也使用该值。降低该值会按签发时间收紧已签发 admin 签名 cookie 的剩余寿命，且不会延长其原始 `exp`。 |
+| `SESSION_TTL`                              | `300`                    | 代理请求上下文缓存时间（秒），影响供应商复用策略；不控制 Web UI 登录态。       |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
 | `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
 | `APP_PORT`                                 | `23000`                  | 生产端口，可被容器或进程管理器覆盖。                                         |
